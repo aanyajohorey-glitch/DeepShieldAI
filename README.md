@@ -9,11 +9,13 @@ powered by a pretrained Vision Transformer model.
 
 DeepShield AI lets an authenticated user upload a video and receive an
 AI-generated authenticity verdict (`REAL` / `DEEPFAKE`), a confidence score,
-a risk level, and per-scan metadata — all inside a polished, dark
-glassmorphism dashboard modeled on tools like Microsoft Defender and
-CrowdStrike. The platform is being built in phases: Phase 1 established the
-UI/auth foundation, and Phase 2 wires up real AI-powered video analysis on
-top of it.
+a risk level, a plain-language explanation, and per-scan metadata — all
+inside a polished, dark glassmorphism dashboard modeled on tools like
+Microsoft Defender and CrowdStrike. The platform has been built in phases:
+Phase 1 established the UI/auth foundation, Phase 2 wired up real
+AI-powered video analysis, and Phase 3 hardened the whole thing —
+cleaner AI/backend architecture, a real scan history, automated tests,
+security hardening, and deployment readiness.
 
 ## Problem Statement
 
@@ -22,8 +24,8 @@ eye, and there are few accessible, self-hostable tools that let someone
 upload a clip and get a clear, explainable authenticity signal. DeepShield
 AI addresses this by pairing an approachable UI with an open-source
 pretrained detection model, so a user can go from "is this video real?" to
-a structured answer in seconds, without needing ML expertise or training
-infrastructure of their own.
+a structured, explained answer in seconds, without needing ML expertise or
+training infrastructure of their own.
 
 ## Features
 
@@ -41,8 +43,18 @@ infrastructure of their own.
 - Pretrained Vision Transformer inference (Hugging Face `transformers`), loaded once at startup, CPU/GPU auto-detected
 - Animated "Analyzing Video..." processing screen with staged status messages
 - Results page: verdict card, circular confidence meter, risk badge, frame/timing/model metadata
-- Scan history persisted per-user in SQLite (`GET /api/detection/history`, `GET /api/detection/{id}`, `DELETE /api/detection/{id}`)
+- Scan history persisted per-user in SQLite
 - Friendly error handling for invalid formats, oversized files, corrupted videos, and backend/model unavailability
+
+### Phase 3 — Product Hardening
+- **AI pipeline refactor**: model loading, preprocessing, and prediction split into a dedicated `app/ai/` package (`model_loader.py`, `preprocessing.py`, `prediction.py`) instead of one monolithic service file
+- **Plain-language explanations**: every scan now includes a data-derived `explanation` string (e.g. *"Analyzed 5 sampled frames. The average fake-likelihood was 40.5%..."*) — templated from the real computed scores, not a fabricated AI narrative
+- **Magic-byte upload validation**: files are checked against their real container signature (MP4/MOV `ftyp`, AVI `RIFF...AVI `, MKV EBML header), not just their extension, so a renamed malicious file is rejected before it ever touches the video pipeline
+- **Backend hardening**: structured request logging, a global exception handler that never leaks stack traces, a dependency-free in-memory rate limiter (10 analyses/minute/user) on the expensive inference endpoint, and GZip response compression
+- **Detection History page**: a real `/history` page (previously a placeholder) backed by the existing history API — paginated table, per-scan detail dialog, delete with confirmation
+- **Downloadable reports**: one-click plain-text scan report, generated client-side
+- **Automated tests**: 19 backend pytest tests (auth, health, and a full real-model detection pipeline run) and 31 frontend Vitest/RTL tests (utils, validation logic, UI components, the report generator)
+- **Deployment readiness**: Dockerfiles for both services, a `docker-compose.yml`, and documented production environment variables
 
 ## Technologies Used
 
@@ -53,6 +65,10 @@ infrastructure of their own.
 **Backend:** FastAPI, SQLAlchemy 2.0, SQLite, Pydantic v2, python-jose (JWT), bcrypt
 
 **AI/ML:** Hugging Face `transformers`, PyTorch (CPU by default, GPU if available), OpenCV (`opencv-python-headless`), Pillow
+
+**Testing:** pytest + httpx (backend), Vitest + React Testing Library (frontend)
+
+**Deployment:** Docker, Docker Compose
 
 ## System Architecture
 
@@ -70,27 +86,35 @@ infrastructure of their own.
                                                             │ detections   │
                                                             └──────────────┘
                                                                      ▲
-                                                                     │ inference calls
+                                                                     │ orchestrates
                                                             ┌────────┴────────┐
-                                                            │ Detection Service│
-                                                            │  OpenCV frame    │
-                                                            │  sampling        │
+                                                            │ detection_service │
+                                                            │  (validate, save, │
+                                                            │   persist, query) │
                                                             └────────┬────────┘
                                                                      ▼
                                                         ┌────────────────────────┐
-                                                        │ Pretrained ViT model    │
-                                                        │ (Hugging Face pipeline, │
-                                                        │  loaded once at startup)│
+                                                        │        app/ai/          │
+                                                        │ preprocessing.py — frame │
+                                                        │  extraction + magic-byte │
+                                                        │  validation (OpenCV)     │
+                                                        │ prediction.py — inference│
+                                                        │  + explanation           │
+                                                        │ model_loader.py — Hugging│
+                                                        │  Face pipeline singleton,│
+                                                        │  loaded once at startup  │
                                                         └────────────────────────┘
 ```
 
 - **Frontend** — Next.js App Router with route groups: public marketing
   pages, `/login` and `/register`, and an authenticated `(app)` group
-  (dashboard, detection, settings, profile, etc.) guarded by both Next.js
-  middleware (edge-level cookie check) and a client-side `ProtectedRoute`.
+  (dashboard, detection, history, settings, profile, etc.) guarded by both
+  Next.js middleware (edge-level cookie check) and a client-side `ProtectedRoute`.
 - **Backend** — FastAPI app organized by concern: `api/routes` (HTTP layer),
-  `services` (business logic — auth, detection, AI model), `db/models`
-  (SQLAlchemy tables), `schemas` (Pydantic request/response contracts).
+  `services` (request orchestration — auth, detection), `ai` (model loading,
+  preprocessing, prediction — pure AI concerns), `db/models` (SQLAlchemy
+  tables), `schemas` (Pydantic request/response contracts), `utils`
+  (logging, rate limiting).
 - **AI model** — A Hugging Face `image-classification` pipeline is loaded
   once during the FastAPI `lifespan` startup hook (never per-request) and
   reused for every scan.
@@ -99,6 +123,33 @@ infrastructure of their own.
   runs the request against SQLite via SQLAlchemy, and returns camelCase JSON
   (via a shared Pydantic `CamelModel`) that matches the frontend's
   TypeScript types 1:1.
+
+## Complete Workflow
+
+```
+User uploads a video (drag-and-drop or browse)
+        ↓
+Frontend validation (extension + size, instant feedback)
+        ↓
+Streaming upload to the backend (real progress bar, cancel supported)
+        ↓
+Backend re-validates: extension, magic-byte signature, size, rate limit
+        ↓
+OpenCV extracts frames (configurable sampling, capped for latency)
+        ↓
+Pretrained ViT model runs inference on the sampled frames (batched)
+        ↓
+Scores are aggregated → verdict, confidence, risk level, explanation
+        ↓
+Result is persisted to SQLite, scoped to the requesting user
+        ↓
+JSON response returned to the frontend
+        ↓
+Results dashboard renders: verdict card, confidence meter, analysis
+summary, metadata grid — with an optional downloadable text report
+        ↓
+The scan is now visible in Detection History for later review or deletion
+```
 
 ## Project Structure
 
@@ -113,23 +164,32 @@ DeepShieldAI/
 │   └── README.md
 ├── backend/                  FastAPI application
 │   ├── app/
+│   │   ├── ai/                AI concerns only: model_loader.py, preprocessing.py, prediction.py, errors.py
 │   │   ├── api/routes/       HTTP endpoints (auth, detection, health)
 │   │   ├── core/             Config (Settings) and security (JWT, hashing)
 │   │   ├── db/                SQLAlchemy engine/session and models (User, Detection)
 │   │   ├── schemas/           Pydantic request/response models
-│   │   ├── services/          Business logic (auth, AI model loader, detection pipeline)
-│   │   └── main.py            App factory, CORS, router mounting, startup hook
+│   │   ├── services/          Request orchestration (auth_service, detection_service)
+│   │   ├── utils/              logging_config.py, rate_limit.py
+│   │   └── main.py            App factory, middleware, exception handler, router mounting
+│   ├── tests/                 pytest suite (health, auth, detection — real model inference)
 │   ├── requirements.txt
+│   ├── requirements-dev.txt   Adds pytest + httpx for running tests
+│   ├── Dockerfile
 │   └── .env.example
 ├── frontend/                  Next.js 15 application
-│   └── src/
-│       ├── app/                Routes: landing, auth, and the authenticated (app) group
-│       ├── components/         ui/ (design system), layout/, landing/, dashboard/, detection/, settings/, auth/
-│       ├── context/             AuthContext (session state)
-│       ├── lib/                 API client, constants, utils
-│       ├── hooks/                useAuth, useToast, useLocalStorage, useOnClickOutside
-│       ├── types/                 Shared TypeScript types
-│       └── middleware.ts          Edge-level route protection
+│   ├── src/
+│   │   ├── app/                Routes: landing, auth, and the authenticated (app) group
+│   │   ├── components/         ui/ (design system), layout/, landing/, dashboard/, detection/, history/, settings/, auth/
+│   │   ├── context/             AuthContext (session state)
+│   │   ├── lib/                 API client, constants, utils, report generator
+│   │   ├── hooks/                useAuth, useToast, useLocalStorage, useOnClickOutside
+│   │   ├── types/                 Shared TypeScript types
+│   │   └── middleware.ts          Edge-level route protection
+│   ├── *.test.ts(x)            Vitest + React Testing Library tests, colocated with the code they cover
+│   ├── Dockerfile
+│   └── vitest.config.ts
+├── docker-compose.yml
 ├── README.md
 └── .gitignore
 ```
@@ -140,10 +200,10 @@ DeepShieldAI/
 
 ## Dataset
 
-DeepShield AI's Phase 2 detector uses a **pretrained** Hugging Face model
-for inference only — this repository does not train a model and does not
-ship a training dataset. Full details, including what is/isn't known about
-the pretrained model's original training data, how to regenerate lightweight
+DeepShield AI's detector uses a **pretrained** Hugging Face model for
+inference only — this repository does not train a model and does not ship
+a training dataset. Full details, including what is/isn't known about the
+pretrained model's original training data, how to regenerate lightweight
 test clips for local QA, and how to obtain a real evaluation dataset if you
 want to benchmark accuracy, are documented in:
 
@@ -217,14 +277,89 @@ be replaced with your own value before any real deployment.
 3. From the dashboard sidebar, open **Detection**.
 4. Drag and drop a video (or click to browse) — MP4, MOV, AVI, or MKV, up to 200MB.
 5. Click **Analyze Video** and watch the live upload progress, then the animated analysis screen.
-6. Review the result: verdict, confidence meter, risk level, frames analyzed, processing time, and model used.
-7. Click **Scan Another Video** to run another analysis, or explore Settings/Profile.
+6. Review the result: verdict, confidence meter, risk level, analysis summary, frames analyzed, processing time, and model used. Optionally click **Download Report**.
+7. Open **History** in the sidebar to browse, review, or delete past scans.
+8. Explore Settings/Profile as needed.
+
+## Testing
+
+### Backend (pytest)
+
+```powershell
+cd backend
+.\venv\Scripts\pip.exe install -r requirements-dev.txt
+.\venv\Scripts\python.exe -m pytest -v
+```
+
+Tests run against an isolated SQLite file (never your dev `deepshield.db`)
+and exercise the **real** AI model end-to-end — including a full
+upload → frame extraction → inference → aggregation pass on a small
+synthetic video generated on the fly, plus auth, validation, and
+authorization-scoping checks (a user can't view or delete another user's
+scans).
+
+### Frontend (Vitest + React Testing Library)
+
+```powershell
+cd frontend
+npm run test
+```
+
+Covers formatting/validation utilities, the report generator, and key UI
+components (`Button`, `StatusBadge`, `UploadDropzone` file-selection logic).
+
+## Deployment
+
+### Docker (recommended)
+
+Dockerfiles are provided for both services (`backend/Dockerfile`,
+`frontend/Dockerfile`, multi-stage using Next's `standalone` output) along
+with a root `docker-compose.yml`. **These have not been verified with an
+actual Docker build in this environment** (Docker isn't installed here) —
+review them before relying on them in production.
+
+```powershell
+$env:SECRET_KEY = "generate-a-long-random-value"
+docker compose up --build
+```
+
+This builds and starts both services: backend on `:8000`, frontend on
+`:3000`. The SQLite database persists in a named volume (`backend_data`)
+across container restarts.
+
+### Manual / non-Docker deployment
+
+- **Backend**: run behind a production ASGI setup (e.g. `uvicorn` with
+  multiple workers behind a reverse proxy, or Gunicorn with the
+  `uvicorn.workers.UvicornWorker` class). Set `ENVIRONMENT=production`,
+  a real `SECRET_KEY`, and `CORS_ORIGINS` restricted to your actual frontend
+  domain. The in-memory rate limiter and model singleton are per-process —
+  running multiple workers means each gets its own copy of both (multiple
+  model loads = more memory; rate limits become per-worker, not global).
+- **Frontend**: `npm run build && npm start`, or deploy the standalone
+  output (`.next/standalone`) directly. Set `NEXT_PUBLIC_API_URL` to your
+  deployed backend's public URL **at build time** (it's inlined into the
+  client bundle, not read at runtime).
+- **Database**: SQLite is fine for a single-instance deployment; for
+  anything with concurrent writers at scale, migrate to Postgres by
+  changing `DATABASE_URL` (SQLAlchemy handles the rest, though you'll want
+  to add a migration tool — see Future Improvements).
+
+### Production checklist
+
+- [ ] Generate a fresh `SECRET_KEY` (never reuse the example/dev value)
+- [ ] Set `CORS_ORIGINS` to your real frontend origin(s) only
+- [ ] Set `NEXT_PUBLIC_API_URL` to your real backend URL before building the frontend
+- [ ] Put the backend behind HTTPS (a reverse proxy like Caddy/nginx is the simplest path)
+- [ ] Confirm `.env` files are not committed (they aren't tracked — see `.gitignore`)
 
 ## Future Improvements
 
-- Build out the History and Analytics pages against the already-implemented `/api/detection/history` endpoint
+- Build out the Analytics page against the existing detection history data
 - Fine-tune a model on a modern deepfake dataset to address the concept-drift limitation noted in `datasets/dataset_info.md`
-- Add an AI assistant that can explain a specific scan result in natural language
+- Add an AI assistant that can explain a specific scan result conversationally
 - Add real-time progress streaming (WebSocket/SSE) instead of the current single request/response cycle
-- Support audio and image deepfake detection (explicitly out of scope for Phase 2)
+- Support audio and image deepfake detection (explicitly out of scope so far)
 - Add password reset, email verification, and two-factor authentication
+- Add a database migration tool (e.g. Alembic) — schema changes currently require recreating the local dev database
+- Move the rate limiter and model cache to a shared store (e.g. Redis) if scaling to multiple backend workers

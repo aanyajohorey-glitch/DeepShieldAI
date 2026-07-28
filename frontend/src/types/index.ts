@@ -61,6 +61,7 @@ export interface DetectionResult {
   confidence: number;
   riskLevel: DetectionRiskLevel;
   avgFrameScore: number;
+  explanation: string;
   framesProcessed: number;
   processingTime: number;
   modelUsed: string;

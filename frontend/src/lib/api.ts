@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./constants";
-import type { ApiError, DetectionResult } from "@/types";
+import type { ApiError, DetectionHistoryResponse, DetectionResult } from "@/types";
 
 export class ApiRequestError extends Error {
   status: number;
@@ -103,4 +103,16 @@ export function uploadVideo(file: File, token: string, onProgress?: (percent: nu
   });
 
   return { promise, abort: () => xhr.abort() };
+}
+
+export function getDetectionHistory(token: string, limit = 20, offset = 0) {
+  return apiFetch<DetectionHistoryResponse>(`/detection/history?limit=${limit}&offset=${offset}`, { token });
+}
+
+export function getDetectionById(token: string, id: number) {
+  return apiFetch<DetectionResult>(`/detection/${id}`, { token });
+}
+
+export function deleteDetectionById(token: string, id: number) {
+  return apiFetch<void>(`/detection/${id}`, { method: "DELETE", token });
 }

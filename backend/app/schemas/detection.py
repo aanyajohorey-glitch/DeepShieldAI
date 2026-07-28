@@ -14,6 +14,7 @@ class DetectionResult(CamelModel):
     confidence: float
     risk_level: RiskLevel
     avg_frame_score: float
+    explanation: str
     frames_processed: int
     processing_time: float
     model_used: str

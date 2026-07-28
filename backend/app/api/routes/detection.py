@@ -12,11 +12,17 @@ from app.services.detection_service import (
     get_detection,
     get_history,
 )
+from app.utils.rate_limit import rate_limit_detection
 
 router = APIRouter(prefix="/detection", tags=["Detection"])
 
 
-@router.post("/analyze", response_model=DetectionResult, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/analyze",
+    response_model=DetectionResult,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_detection)],
+)
 def analyze(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),

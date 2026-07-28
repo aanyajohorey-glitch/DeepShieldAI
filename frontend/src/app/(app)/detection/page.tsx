@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
-import { RotateCcw } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { UploadDropzone } from "@/components/detection/UploadDropzone";
 import { SelectedFilePreview } from "@/components/detection/SelectedFilePreview";
@@ -12,9 +12,11 @@ import { ScanningScreen } from "@/components/detection/ScanningScreen";
 import { VerdictCard } from "@/components/detection/VerdictCard";
 import { ConfidenceMeter } from "@/components/detection/ConfidenceMeter";
 import { ResultMetaGrid } from "@/components/detection/ResultMetaGrid";
+import { AnalysisSummary } from "@/components/detection/AnalysisSummary";
 import { ErrorState } from "@/components/detection/ErrorState";
 import { uploadVideo, ApiRequestError } from "@/lib/api";
 import { AUTH_COOKIE_NAME } from "@/lib/constants";
+import { downloadReport } from "@/lib/report";
 import type { DetectionResult } from "@/types";
 
 type Phase = "select" | "uploading" | "processing" | "result" | "error";
@@ -130,12 +132,18 @@ export default function DetectionPage() {
               </div>
             </div>
 
+            <AnalysisSummary result={result} />
+
             <ResultMetaGrid result={result} />
 
-            <div className="flex justify-center">
+            <div className="flex flex-col justify-center gap-3 sm:flex-row">
               <Button onClick={reset} variant="secondary" size="lg">
                 <RotateCcw className="size-4" />
                 Scan Another Video
+              </Button>
+              <Button onClick={() => downloadReport(result)} variant="outline" size="lg">
+                <Download className="size-4" />
+                Download Report
               </Button>
             </div>
           </motion.div>
