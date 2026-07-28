@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi==0.121.2
 uvicorn[standard]==0.38.0
 sqlalchemy==2.0.44
@@ -7,3 +9,10 @@ email-validator==2.2.0
 python-jose[cryptography]==3.4.0
 bcrypt==4.2.1
 python-multipart==0.0.20
+
+# Deepfake detection (video pipeline)
+torch==2.13.0
+transformers==5.14.1
+opencv-python-headless==5.0.0.93
+pillow==12.3.0
+numpy==2.5.1

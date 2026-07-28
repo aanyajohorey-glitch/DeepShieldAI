@@ -23,5 +23,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
+    # Deepfake detection
+    detection_model_name: str = "dima806/deepfake_vs_real_image_detection"
+    detection_upload_dir: str = "./tmp_uploads"
+    detection_max_upload_mb: int = 200
+    detection_allowed_extensions: list[str] = [".mp4", ".mov", ".avi", ".mkv"]
+    detection_frame_sample_seconds: float = 1.0
+    detection_max_frames: int = 30
+    detection_fake_threshold: float = 0.5
+
 
 settings = Settings()

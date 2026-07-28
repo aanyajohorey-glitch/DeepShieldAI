@@ -4,3 +4,28 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Datasets & AI artifacts (see datasets/README.md for how to obtain data)
+datasets/raw/*
+!datasets/raw/.gitkeep
+datasets/processed/*
+!datasets/processed/.gitkeep
+*.zip
+*.tar.gz
+*.h5
+*.pt
+*.pth
+*.onnx
+*.ckpt
+models/*
+!models/.gitkeep
+!models/README.md

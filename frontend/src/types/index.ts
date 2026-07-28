@@ -49,3 +49,25 @@ export interface StatCardData {
 export interface ApiError {
   detail: string;
 }
+
+export type DetectionPrediction = "REAL" | "DEEPFAKE";
+
+export type DetectionRiskLevel = "Low" | "Medium" | "High";
+
+export interface DetectionResult {
+  id: number;
+  filename: string;
+  prediction: DetectionPrediction;
+  confidence: number;
+  riskLevel: DetectionRiskLevel;
+  avgFrameScore: number;
+  framesProcessed: number;
+  processingTime: number;
+  modelUsed: string;
+  createdAt: string;
+}
+
+export interface DetectionHistoryResponse {
+  total: number;
+  items: DetectionResult[];
+}
