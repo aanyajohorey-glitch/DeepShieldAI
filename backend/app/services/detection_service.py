@@ -2,6 +2,7 @@
 persist. AI concerns (model loading, frame extraction, inference) live in
 app.ai; this module owns the request-scoped workflow and database writes."""
 
+import logging
 import time
 from pathlib import Path
 
@@ -9,24 +10,31 @@ from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.ai import prediction as prediction_module
+from app.ai import prediction_service
 from app.ai.errors import DetectionError
-from app.ai.preprocessing import extract_frames, save_upload_streaming, validate_extension
+from app.ai.preprocessing import extract_frames, extract_metadata, save_upload_streaming, validate_extension
 from app.core.config import settings
 from app.db.models.detection import Detection
 from app.db.models.user import User
+
+logger = logging.getLogger("deepshield.detection")
 
 __all__ = ["DetectionError", "analyze_video", "get_history", "get_detection", "delete_detection"]
 
 
 def analyze_video(db: Session, user: User, upload_file: UploadFile) -> Detection:
     extension = validate_extension(upload_file.filename)
-    temp_path, _ = save_upload_streaming(upload_file, extension)
+    temp_path, file_size = save_upload_streaming(upload_file, extension)
+    logger.info("Upload received: user=%s filename=%s size=%dB", user.id, upload_file.filename, file_size)
 
     started_at = time.perf_counter()
     try:
+        video_metadata = extract_metadata(temp_path)
         frames = extract_frames(temp_path)
-        outcome = prediction_module.predict(frames)
+        outcome = prediction_service.predict(frames)
+    except DetectionError as error:
+        logger.warning("Analysis rejected: user=%s filename=%s reason=%s", user.id, upload_file.filename, error)
+        raise
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -43,10 +51,32 @@ def analyze_video(db: Session, user: User, upload_file: UploadFile) -> Detection
         frames_processed=len(frames),
         processing_time=processing_time,
         model_used=settings.detection_model_name,
+        frame_scores=outcome.frame_scores,
+        temporal_consistency=outcome.temporal_consistency,
+        model_certainty=outcome.model_certainty,
+        heuristics=outcome.heuristics,
+        heatmap_filename=outcome.heatmap_filename,
+        video_width=video_metadata.width,
+        video_height=video_metadata.height,
+        video_duration_seconds=video_metadata.duration_seconds,
+        video_fps=video_metadata.fps,
+        video_codec=video_metadata.codec,
+        video_frame_count=video_metadata.frame_count,
+        file_size_bytes=file_size,
     )
     db.add(detection)
     db.commit()
     db.refresh(detection)
+
+    logger.info(
+        "Prediction complete: user=%s detection_id=%s verdict=%s confidence=%.1f%% frames=%d time=%.2fs",
+        user.id,
+        detection.id,
+        detection.prediction,
+        detection.confidence,
+        detection.frames_processed,
+        processing_time,
+    )
 
     return detection
 
@@ -74,4 +104,5 @@ def delete_detection(db: Session, user: User, detection_id: int) -> bool:
         return False
     db.delete(detection)
     db.commit()
+    logger.info("Detection deleted: user=%s detection_id=%s", user.id, detection_id)
     return True

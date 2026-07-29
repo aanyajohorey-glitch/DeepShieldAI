@@ -2,29 +2,33 @@
 
 An AI-powered cybersecurity platform for detecting deepfake videos, built as
 an AI & Cybersecurity capstone project. DeepShield AI combines a modern
-security-operations dashboard with a real deepfake-detection pipeline
-powered by a pretrained Vision Transformer model.
+security-operations dashboard with a real, explainable deepfake-detection
+pipeline powered by a pretrained Vision Transformer model.
 
 ## Overview
 
 DeepShield AI lets an authenticated user upload a video and receive an
 AI-generated authenticity verdict (`REAL` / `DEEPFAKE`), a confidence score,
-a risk level, a plain-language explanation, and per-scan metadata — all
-inside a polished, dark glassmorphism dashboard modeled on tools like
-Microsoft Defender and CrowdStrike. The platform has been built in phases:
-Phase 1 established the UI/auth foundation, Phase 2 wired up real
-AI-powered video analysis, and Phase 3 hardened the whole thing —
-cleaner AI/backend architecture, a real scan history, automated tests,
-security hardening, and deployment readiness.
+a risk level, a plain-language explanation, a per-frame score breakdown, a
+visual attention heatmap, and a downloadable branded PDF report — all inside
+a polished, dark glassmorphism dashboard modeled on tools like Microsoft
+Defender and CrowdStrike. The platform has been built in phases: Phase 1
+established the UI/auth foundation, Phase 2 wired up real AI-powered video
+analysis, Phase 3 hardened the product (tests, security, deployment
+readiness), and Phase 4 made the AI pipeline explainable and more
+production-grade (richer confidence signals, a visual explanation, PDF
+reporting, structured logging, and centralized configuration).
 
 ## Problem Statement
 
 Deepfake video content is increasingly difficult for people to identify by
 eye, and there are few accessible, self-hostable tools that let someone
-upload a clip and get a clear, explainable authenticity signal. DeepShield
-AI addresses this by pairing an approachable UI with an open-source
-pretrained detection model, so a user can go from "is this video real?" to
-a structured, explained answer in seconds, without needing ML expertise or
+upload a clip and get a clear, *explainable* authenticity signal — most
+either give a bare "real/fake" label or don't explain their reasoning at
+all. DeepShield AI addresses this by pairing an approachable UI with an
+open-source pretrained detection model and genuine explainability (not just
+a confidence percentage), so a user can go from "is this video real?" to a
+structured, justified answer in seconds, without needing ML expertise or
 training infrastructure of their own.
 
 ## Features
@@ -47,14 +51,29 @@ training infrastructure of their own.
 - Friendly error handling for invalid formats, oversized files, corrupted videos, and backend/model unavailability
 
 ### Phase 3 — Product Hardening
-- **AI pipeline refactor**: model loading, preprocessing, and prediction split into a dedicated `app/ai/` package (`model_loader.py`, `preprocessing.py`, `prediction.py`) instead of one monolithic service file
-- **Plain-language explanations**: every scan now includes a data-derived `explanation` string (e.g. *"Analyzed 5 sampled frames. The average fake-likelihood was 40.5%..."*) — templated from the real computed scores, not a fabricated AI narrative
-- **Magic-byte upload validation**: files are checked against their real container signature (MP4/MOV `ftyp`, AVI `RIFF...AVI `, MKV EBML header), not just their extension, so a renamed malicious file is rejected before it ever touches the video pipeline
-- **Backend hardening**: structured request logging, a global exception handler that never leaks stack traces, a dependency-free in-memory rate limiter (10 analyses/minute/user) on the expensive inference endpoint, and GZip response compression
-- **Detection History page**: a real `/history` page (previously a placeholder) backed by the existing history API — paginated table, per-scan detail dialog, delete with confirmation
+- **AI pipeline refactor**: model loading, preprocessing, and prediction split into a dedicated `app/ai/` package instead of one monolithic service file
+- **Plain-language explanations**: every scan includes a data-derived `explanation` string, templated from the real computed scores, not a fabricated AI narrative
+- **Magic-byte upload validation**: files are checked against their real container signature (MP4/MOV `ftyp`, AVI `RIFF...AVI `, MKV EBML header), not just their extension
+- **Backend hardening**: structured request logging, a global exception handler, a rate limiter, GZip response compression
+- **Detection History page**: a real `/history` page backed by the history API — paginated table, per-scan detail dialog, delete with confirmation
 - **Downloadable reports**: one-click plain-text scan report, generated client-side
-- **Automated tests**: 19 backend pytest tests (auth, health, and a full real-model detection pipeline run) and 31 frontend Vitest/RTL tests (utils, validation logic, UI components, the report generator)
-- **Deployment readiness**: Dockerfiles for both services, a `docker-compose.yml`, and documented production environment variables
+- **Automated tests & deployment readiness**: pytest + Vitest suites, Dockerfiles, `docker-compose.yml`
+
+### Phase 4 — Explainable AI & Production Polish
+- **Deeper pipeline refactor**: `app/ai/` split further into `inference.py` (raw model calls), `postprocessing.py` (verdict aggregation), `confidence.py` (statistics), `explainability.py` (XAI), and `prediction_service.py` (orchestrator) — each module has one job
+- **Real Explainable AI, not invented categories**: the model is a single Real/Fake classifier, so DeepShield AI doesn't pretend it can label *why* (e.g. "compression artifact" vs "face-swap"). Instead it surfaces what the pipeline actually computes:
+  - **Attention rollout heatmap** — a genuine XAI technique (Abnar & Zuidema, 2020) run on the ViT's own attention weights, visualizing which regions of the most-suspicious frame influenced the decision
+  - **Per-frame score breakdown** — every sampled frame's individual fake-likelihood, charted
+  - **Temporal consistency** — how much the sampled frames agreed with each other (low agreement can mean partial manipulation)
+  - **Model certainty** — how far the result sits from the decision threshold (distinct from confidence-in-predicted-class)
+  - **Supplementary sharpness heuristic** — Laplacian-variance blur analysis, a well-known weak signal from deepfake-forensics literature, clearly labeled as supplementary
+- **Video metadata extraction**: resolution, duration, fps, frame count, and codec, read via OpenCV and surfaced in both the dashboard and PDF report
+- **Branded PDF reports**: a professional, downloadable PDF (report ID, verdict, all confidence/consistency stats, file metadata, disclaimer) generated server-side with `reportlab`, in addition to the existing text report
+- **Model management**: a `ModelManager` class (load, validate output contract, and — for future phases — hot-swap to a different Hugging Face model) behind the same stable module functions the rest of the app already calls
+- **Structured file logging**: rotating log files under `backend/logs/`, capturing startup, uploads, predictions, and errors
+- **Fully centralized configuration**: every previously-hardcoded value (rate limits, frame resize cap, log level) now lives in `Settings`
+- **Performance**: oversized frames are downscaled before color conversion/inference; the model, tokenizer, and image processor are still loaded exactly once at startup
+- **Expanded tests**: 29 backend pytest tests (including large-file rejection, corrupted-media handling, PDF generation, and model-manager validation) and 37 frontend Vitest tests
 
 ## Technologies Used
 
@@ -65,6 +84,8 @@ training infrastructure of their own.
 **Backend:** FastAPI, SQLAlchemy 2.0, SQLite, Pydantic v2, python-jose (JWT), bcrypt
 
 **AI/ML:** Hugging Face `transformers`, PyTorch (CPU by default, GPU if available), OpenCV (`opencv-python-headless`), Pillow
+
+**Reporting:** ReportLab (server-side PDF generation)
 
 **Testing:** pytest + httpx (backend), Vitest + React Testing Library (frontend)
 
@@ -95,14 +116,31 @@ training infrastructure of their own.
                                                                      ▼
                                                         ┌────────────────────────┐
                                                         │        app/ai/          │
-                                                        │ preprocessing.py — frame │
-                                                        │  extraction + magic-byte │
-                                                        │  validation (OpenCV)     │
-                                                        │ prediction.py — inference│
-                                                        │  + explanation           │
-                                                        │ model_loader.py — Hugging│
-                                                        │  Face pipeline singleton,│
+                                                        │ preprocessing.py         │
+                                                        │  frame extraction,       │
+                                                        │  magic-byte validation,  │
+                                                        │  video metadata          │
+                                                        │ inference.py             │
+                                                        │  raw batched model calls │
+                                                        │ postprocessing.py        │
+                                                        │  score → verdict         │
+                                                        │ confidence.py            │
+                                                        │  certainty / consistency │
+                                                        │ explainability.py        │
+                                                        │  attention heatmap,      │
+                                                        │  heuristics, explanation │
+                                                        │ prediction_service.py    │
+                                                        │  orchestrates the above  │
+                                                        │ model_loader.py          │
+                                                        │  ModelManager singleton, │
                                                         │  loaded once at startup  │
+                                                        └────────────────────────┘
+                                                                     │
+                                                                     ▼
+                                                        ┌────────────────────────┐
+                                                        │      app/reports/        │
+                                                        │ pdf_report.py — branded  │
+                                                        │  PDF template (ReportLab)│
                                                         └────────────────────────┘
 ```
 
@@ -111,18 +149,59 @@ training infrastructure of their own.
   (dashboard, detection, history, settings, profile, etc.) guarded by both
   Next.js middleware (edge-level cookie check) and a client-side `ProtectedRoute`.
 - **Backend** — FastAPI app organized by concern: `api/routes` (HTTP layer),
-  `services` (request orchestration — auth, detection), `ai` (model loading,
-  preprocessing, prediction — pure AI concerns), `db/models` (SQLAlchemy
-  tables), `schemas` (Pydantic request/response contracts), `utils`
-  (logging, rate limiting).
+  `services` (request orchestration), `ai` (model loading, preprocessing,
+  inference, postprocessing, confidence, explainability — pure AI concerns),
+  `reports` (PDF templates), `db/models` (SQLAlchemy tables), `schemas`
+  (Pydantic request/response contracts), `utils` (logging, rate limiting).
 - **AI model** — A Hugging Face `image-classification` pipeline is loaded
-  once during the FastAPI `lifespan` startup hook (never per-request) and
-  reused for every scan.
+  once during the FastAPI `lifespan` startup hook via `ModelManager` (never
+  per-request) and reused for every scan. The heatmap pass temporarily
+  switches the model's attention implementation from the default fused
+  `sdpa` kernel (fast, but doesn't expose attention weights) to `eager`
+  just for that one forward pass, then switches back — regular inference
+  is unaffected.
+- **Static files** — attention heatmaps are saved under `backend/static/`
+  and served directly by FastAPI's `StaticFiles` at `/static/...`.
 - **Database/API flow** — Frontend calls `/api/auth/*` and
   `/api/detection/*` with a JWT bearer token; FastAPI validates the token,
   runs the request against SQLite via SQLAlchemy, and returns camelCase JSON
   (via a shared Pydantic `CamelModel`) that matches the frontend's
   TypeScript types 1:1.
+
+## Explainable AI Workflow
+
+DeepShield AI's model is a binary Vision Transformer classifier — it scores
+each frame as Real or Fake, nothing more granular. Rather than inventing
+manipulation categories it can't actually detect, the explainability layer
+builds a genuinely informative picture from what the pipeline *does*
+compute:
+
+```
+Sampled frames
+      ↓
+inference.py → one fake-likelihood score per frame (raw model output)
+      ↓
+postprocessing.py → aggregate scores into an overall REAL/DEEPFAKE verdict
+      ↓
+confidence.py → confidence %, risk level, temporal consistency (score
+                 variance across frames), model certainty (distance from
+                 the decision threshold)
+      ↓
+explainability.py →
+   • attention rollout on the most-suspicious frame (real ViT attention
+     weights, not a generic saliency approximation) → heatmap image
+   • supplementary sharpness heuristic (Laplacian variance)
+   • a plain-language explanation stitching all of the above together,
+     including an explicit note that manipulation *type* isn't identified
+      ↓
+Persisted + returned: verdict, confidence, risk level, per-frame scores,
+temporal consistency, model certainty, heuristics, heatmap URL, explanation
+```
+
+This is surfaced in the UI as: a verdict card, a circular confidence meter,
+a per-frame bar chart, a certainty/consistency panel, the attention heatmap
+image, and the full analysis-summary paragraph — plus all of it in the
+downloadable PDF report.
 
 ## Complete Workflow
 
@@ -135,18 +214,25 @@ Streaming upload to the backend (real progress bar, cancel supported)
         ↓
 Backend re-validates: extension, magic-byte signature, size, rate limit
         ↓
-OpenCV extracts frames (configurable sampling, capped for latency)
+OpenCV extracts video metadata (resolution, fps, duration, codec) and
+sampled frames (configurable sampling, oversized frames downscaled first)
         ↓
-Pretrained ViT model runs inference on the sampled frames (batched)
+Pretrained ViT model runs batched inference on the sampled frames
         ↓
-Scores are aggregated → verdict, confidence, risk level, explanation
+Scores are aggregated → verdict, confidence, risk level
         ↓
-Result is persisted to SQLite, scoped to the requesting user
+Confidence stats computed → temporal consistency, model certainty
+        ↓
+Explainability generated → attention heatmap, heuristics, explanation text
+        ↓
+Result persisted to SQLite, scoped to the requesting user; structured logs
+written for the upload and the prediction
         ↓
 JSON response returned to the frontend
         ↓
 Results dashboard renders: verdict card, confidence meter, analysis
-summary, metadata grid — with an optional downloadable text report
+summary, per-frame chart, certainty/consistency panel, attention heatmap,
+full metadata grid — with downloadable text and PDF reports
         ↓
 The scan is now visible in Detection History for later review or deletion
 ```
@@ -160,21 +246,36 @@ DeepShieldAI/
 │   ├── dataset_info.md
 │   ├── raw/                  Empty — reserved for future local datasets (gitignored)
 │   └── processed/            Empty — reserved for future processed data (gitignored)
-├── models/                   No weights stored here — see models/README.md
-│   └── README.md
+├── models/                   No weights stored in git — see models/README.md
+│   ├── README.md
+│   ├── trained/               Reserved for future fine-tuned model exports (gitignored)
+│   ├── checkpoints/           Reserved for future training checkpoints (gitignored)
+│   ├── configs/                Reserved for future model config files (gitignored)
+│   └── weights/                Reserved for future local weight files (gitignored)
 ├── backend/                  FastAPI application
 │   ├── app/
-│   │   ├── ai/                AI concerns only: model_loader.py, preprocessing.py, prediction.py, errors.py
-│   │   ├── api/routes/       HTTP endpoints (auth, detection, health)
-│   │   ├── core/             Config (Settings) and security (JWT, hashing)
-│   │   ├── db/                SQLAlchemy engine/session and models (User, Detection)
-│   │   ├── schemas/           Pydantic request/response models
-│   │   ├── services/          Request orchestration (auth_service, detection_service)
-│   │   ├── utils/              logging_config.py, rate_limit.py
-│   │   └── main.py            App factory, middleware, exception handler, router mounting
-│   ├── tests/                 pytest suite (health, auth, detection — real model inference)
+│   │   ├── ai/                 AI concerns only:
+│   │   │                         model_loader.py — ModelManager singleton
+│   │   │                         preprocessing.py — validation, frame extraction, video metadata
+│   │   │                         inference.py — raw batched model calls
+│   │   │                         postprocessing.py — score → verdict aggregation
+│   │   │                         confidence.py — certainty / temporal consistency stats
+│   │   │                         explainability.py — attention heatmap, heuristics, explanation text
+│   │   │                         prediction_service.py — orchestrates the above
+│   │   │                         errors.py
+│   │   ├── api/routes/        HTTP endpoints (auth, detection, health)
+│   │   ├── core/              Config (Settings) and security (JWT, hashing)
+│   │   ├── db/                 SQLAlchemy engine/session and models (User, Detection)
+│   │   ├── reports/            pdf_report.py — branded PDF template (ReportLab)
+│   │   ├── schemas/            Pydantic request/response models
+│   │   ├── services/           Request orchestration (auth_service, detection_service)
+│   │   ├── utils/               logging_config.py, rate_limit.py
+│   │   └── main.py             App factory, middleware, exception handler, static mount, router mounting
+│   ├── static/heatmaps/        Generated attention heatmap images (gitignored)
+│   ├── logs/                    Rotating application log files (gitignored)
+│   ├── tests/                   pytest suite (health, auth, detection, model manager)
 │   ├── requirements.txt
-│   ├── requirements-dev.txt   Adds pytest + httpx for running tests
+│   ├── requirements-dev.txt    Adds pytest + httpx for running tests
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/                  Next.js 15 application
@@ -185,6 +286,7 @@ DeepShieldAI/
 │   │   ├── lib/                 API client, constants, utils, report generator
 │   │   ├── hooks/                useAuth, useToast, useLocalStorage, useOnClickOutside
 │   │   ├── types/                 Shared TypeScript types
+│   │   ├── test-utils/             Shared test fixtures
 │   │   └── middleware.ts          Edge-level route protection
 │   ├── *.test.ts(x)            Vitest + React Testing Library tests, colocated with the code they cover
 │   ├── Dockerfile
@@ -209,7 +311,7 @@ want to benchmark accuracy, are documented in:
 
 - [`datasets/README.md`](./datasets/README.md) — purpose, current status, and data flow
 - [`datasets/dataset_info.md`](./datasets/dataset_info.md) — the pretrained model's documented training data, classes, and preprocessing
-- [`models/README.md`](./models/README.md) — which model is loaded and how to swap it
+- [`models/README.md`](./models/README.md) — which model is loaded, the `ModelManager`, and how to swap models
 
 ## Installation
 
@@ -263,6 +365,11 @@ be replaced with your own value before any real deployment.
 | `DETECTION_MAX_UPLOAD_MB` | Upload size cap |
 | `DETECTION_FRAME_SAMPLE_SECONDS`, `DETECTION_MAX_FRAMES` | Frame sampling rate/cap |
 | `DETECTION_FAKE_THRESHOLD` | Score threshold for a `DEEPFAKE` verdict |
+| `DETECTION_MAX_FRAME_DIMENSION` | Frames larger than this (px, longest edge) are downscaled before inference |
+| `DETECTION_ENABLE_HEATMAP` | Toggle the attention-heatmap XAI pass (adds one extra forward pass per scan) |
+| `HEATMAP_DIR` | Where generated heatmap PNGs are saved and served from |
+| `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | Per-user cap on `/detection/analyze` calls |
+| `LOG_DIR`, `LOG_LEVEL` | Rotating log file location and verbosity |
 
 **`frontend/.env.local`** (copy from `frontend/.env.local.example`):
 
@@ -277,8 +384,8 @@ be replaced with your own value before any real deployment.
 3. From the dashboard sidebar, open **Detection**.
 4. Drag and drop a video (or click to browse) — MP4, MOV, AVI, or MKV, up to 200MB.
 5. Click **Analyze Video** and watch the live upload progress, then the animated analysis screen.
-6. Review the result: verdict, confidence meter, risk level, analysis summary, frames analyzed, processing time, and model used. Optionally click **Download Report**.
-7. Open **History** in the sidebar to browse, review, or delete past scans.
+6. Review the result: verdict, confidence meter, model certainty, temporal consistency, per-frame chart, attention heatmap, analysis summary, and full file/video metadata. Download a text or PDF report.
+7. Open **History** in the sidebar to browse, review, or delete past scans — the same rich detail view is available from there too.
 8. Explore Settings/Profile as needed.
 
 ## Testing
@@ -291,12 +398,13 @@ cd backend
 .\venv\Scripts\python.exe -m pytest -v
 ```
 
-Tests run against an isolated SQLite file (never your dev `deepshield.db`)
-and exercise the **real** AI model end-to-end — including a full
-upload → frame extraction → inference → aggregation pass on a small
-synthetic video generated on the fly, plus auth, validation, and
-authorization-scoping checks (a user can't view or delete another user's
-scans).
+29 tests, run against an isolated SQLite file (never your dev
+`deepshield.db`), exercising the **real** AI model end-to-end: a full
+upload → frame extraction → inference → aggregation → explainability pass
+on a small synthetic video generated on the fly; auth; large-file and
+corrupted-media rejection; PDF report generation; model-manager validation;
+and authorization-scoping checks (a user can't view, delete, or download a
+report for another user's scans).
 
 ### Frontend (Vitest + React Testing Library)
 
@@ -305,8 +413,9 @@ cd frontend
 npm run test
 ```
 
-Covers formatting/validation utilities, the report generator, and key UI
-components (`Button`, `StatusBadge`, `UploadDropzone` file-selection logic).
+37 tests covering formatting/validation utilities, the report generator,
+and key UI components — including the new per-frame chart, confidence
+panel, and attention-heatmap components.
 
 ## Deployment
 
@@ -316,7 +425,10 @@ Dockerfiles are provided for both services (`backend/Dockerfile`,
 `frontend/Dockerfile`, multi-stage using Next's `standalone` output) along
 with a root `docker-compose.yml`. **These have not been verified with an
 actual Docker build in this environment** (Docker isn't installed here) —
-review them before relying on them in production.
+review them before relying on them in production. If you add a persistent
+volume for the backend's `static/` and `logs/` directories, generated
+heatmaps and logs will survive container restarts too (only the SQLite
+database is currently volume-mounted).
 
 ```powershell
 $env:SECRET_KEY = "generate-a-long-random-value"
@@ -352,6 +464,7 @@ across container restarts.
 - [ ] Set `NEXT_PUBLIC_API_URL` to your real backend URL before building the frontend
 - [ ] Put the backend behind HTTPS (a reverse proxy like Caddy/nginx is the simplest path)
 - [ ] Confirm `.env` files are not committed (they aren't tracked — see `.gitignore`)
+- [ ] Decide whether `static/` (heatmaps) and `logs/` need persistent volumes for your deployment
 
 ## Future Improvements
 
@@ -363,3 +476,5 @@ across container restarts.
 - Add password reset, email verification, and two-factor authentication
 - Add a database migration tool (e.g. Alembic) — schema changes currently require recreating the local dev database
 - Move the rate limiter and model cache to a shared store (e.g. Redis) if scaling to multiple backend workers
+- Re-introduce a face-presence heuristic using `cv2.FaceDetectorYN` (OpenCV 5 dropped the bundled Haar cascades this project originally used) — deferred because it requires downloading and caching an external ONNX model
+- Support multiple/ensemble models via the `ModelManager`'s existing `switch_model()` capability, once a second model is worth adding

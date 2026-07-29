@@ -1,9 +1,16 @@
-import { Cpu, Layers, Clock, Gauge, CalendarClock } from "lucide-react";
+import { Cpu, Layers, Clock, Gauge, CalendarClock, Film, HardDrive } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { formatDate } from "@/lib/utils";
 import type { DetectionResult } from "@/types";
 
+function formatFileSize(bytes: number | null): string | null {
+  if (!bytes) return null;
+  return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ResultMetaGrid({ result }: { result: DetectionResult }) {
+  const { metadata } = result;
+
   const items = [
     {
       icon: Layers,
@@ -30,6 +37,17 @@ export function ResultMetaGrid({ result }: { result: DetectionResult }) {
       label: "Detection Timestamp",
       value: formatDate(result.createdAt),
     },
+    ...(metadata.width && metadata.height
+      ? [{ icon: Film, label: "Resolution", value: `${metadata.width} × ${metadata.height}` }]
+      : []),
+    ...(metadata.durationSeconds
+      ? [{ icon: Clock, label: "Duration", value: `${metadata.durationSeconds.toFixed(1)}s` }]
+      : []),
+    ...(metadata.fps ? [{ icon: Gauge, label: "Frame Rate", value: `${metadata.fps.toFixed(1)} fps` }] : []),
+    ...(metadata.codec ? [{ icon: Film, label: "Codec", value: metadata.codec }] : []),
+    ...(formatFileSize(metadata.fileSizeBytes)
+      ? [{ icon: HardDrive, label: "File Size", value: formatFileSize(metadata.fileSizeBytes) as string }]
+      : []),
   ];
 
   return (

@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, RotateCcw } from "lucide-react";
+import { Download, FileText, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { UploadDropzone } from "@/components/detection/UploadDropzone";
 import { SelectedFilePreview } from "@/components/detection/SelectedFilePreview";
@@ -11,12 +11,16 @@ import { UploadProgress } from "@/components/detection/UploadProgress";
 import { ScanningScreen } from "@/components/detection/ScanningScreen";
 import { VerdictCard } from "@/components/detection/VerdictCard";
 import { ConfidenceMeter } from "@/components/detection/ConfidenceMeter";
+import { ConfidenceMetricsPanel } from "@/components/detection/ConfidenceMetricsPanel";
+import { FrameScoreChart } from "@/components/detection/FrameScoreChart";
+import { AttentionHeatmap } from "@/components/detection/AttentionHeatmap";
 import { ResultMetaGrid } from "@/components/detection/ResultMetaGrid";
 import { AnalysisSummary } from "@/components/detection/AnalysisSummary";
 import { ErrorState } from "@/components/detection/ErrorState";
-import { uploadVideo, ApiRequestError } from "@/lib/api";
+import { uploadVideo, downloadPdfReport, ApiRequestError } from "@/lib/api";
 import { AUTH_COOKIE_NAME } from "@/lib/constants";
 import { downloadReport } from "@/lib/report";
+import { useToast } from "@/hooks/useToast";
 import type { DetectionResult } from "@/types";
 
 type Phase = "select" | "uploading" | "processing" | "result" | "error";
@@ -27,9 +31,11 @@ export default function DetectionPage() {
   const [uploadPercent, setUploadPercent] = useState(0);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const abortRef = useRef<(() => void) | null>(null);
   const cancelledRef = useRef(false);
+  const { toast } = useToast();
 
   const reset = useCallback(() => {
     setPhase("select");
@@ -81,6 +87,22 @@ export default function DetectionPage() {
     cancelledRef.current = true;
     abortRef.current?.();
   }, []);
+
+  async function handlePdfDownload() {
+    if (!result) return;
+    const token = Cookies.get(AUTH_COOKIE_NAME);
+    if (!token) return;
+
+    setIsDownloadingPdf(true);
+    try {
+      await downloadPdfReport(token, result.id);
+    } catch (error) {
+      const message = error instanceof ApiRequestError ? error.message : "Failed to generate the PDF report.";
+      toast({ title: "PDF download failed", description: message, variant: "error" });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -134,6 +156,13 @@ export default function DetectionPage() {
 
             <AnalysisSummary result={result} />
 
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <FrameScoreChart result={result} />
+              <ConfidenceMetricsPanel result={result} />
+            </div>
+
+            <AttentionHeatmap heatmapUrl={result.heatmapUrl} />
+
             <ResultMetaGrid result={result} />
 
             <div className="flex flex-col justify-center gap-3 sm:flex-row">
@@ -143,7 +172,11 @@ export default function DetectionPage() {
               </Button>
               <Button onClick={() => downloadReport(result)} variant="outline" size="lg">
                 <Download className="size-4" />
-                Download Report
+                Download Text Report
+              </Button>
+              <Button onClick={handlePdfDownload} variant="outline" size="lg" isLoading={isDownloadingPdf}>
+                <FileText className="size-4" />
+                Download PDF Report
               </Button>
             </div>
           </motion.div>

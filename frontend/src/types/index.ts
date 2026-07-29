@@ -54,6 +54,23 @@ export type DetectionPrediction = "REAL" | "DEEPFAKE";
 
 export type DetectionRiskLevel = "Low" | "Medium" | "High";
 
+export interface VideoMetadata {
+  width: number | null;
+  height: number | null;
+  durationSeconds: number | null;
+  fps: number | null;
+  frameCount: number | null;
+  codec: string | null;
+  fileSizeBytes: number | null;
+}
+
+export interface DetectionHeuristics {
+  totalFramesAnalyzed?: number;
+  averageSharpness?: number;
+  minSharpness?: number;
+  [key: string]: number | undefined;
+}
+
 export interface DetectionResult {
   id: number;
   filename: string;
@@ -66,6 +83,14 @@ export interface DetectionResult {
   processingTime: number;
   modelUsed: string;
   createdAt: string;
+  // Explainable AI (Phase 4)
+  frameScores: number[];
+  temporalConsistency: number;
+  modelCertainty: number;
+  heuristics: DetectionHeuristics;
+  heatmapUrl: string | null;
+  // File / video metadata (Phase 4)
+  metadata: VideoMetadata;
 }
 
 export interface DetectionHistoryResponse {

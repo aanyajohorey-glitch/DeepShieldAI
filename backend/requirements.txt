@@ -16,3 +16,6 @@ transformers==5.14.1
 opencv-python-headless==5.0.0.93
 pillow==12.3.0
 numpy==2.5.1
+
+# PDF report generation
+reportlab==5.0.0

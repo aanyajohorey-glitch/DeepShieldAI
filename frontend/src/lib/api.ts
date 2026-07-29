@@ -116,3 +116,34 @@ export function getDetectionById(token: string, id: number) {
 export function deleteDetectionById(token: string, id: number) {
   return apiFetch<void>(`/detection/${id}`, { method: "DELETE", token });
 }
+
+/**
+ * Fetches the server-generated PDF report as a blob (auth requires a
+ * header, so this can't be a plain `<a href>` link) and triggers a download.
+ */
+export async function downloadPdfReport(token: string, id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/detection/${id}/report/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const errorBody = (await response.json()) as ApiError;
+      if (errorBody?.detail) message = errorBody.detail;
+    } catch {
+      // Response body was not JSON; fall back to the generic message.
+    }
+    throw new ApiRequestError(response.status, message);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `deepshield-report-DS-${String(id).padStart(6, "0")}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

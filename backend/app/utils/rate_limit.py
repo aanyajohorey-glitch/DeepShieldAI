@@ -12,6 +12,7 @@ from threading import Lock
 from fastapi import Depends, HTTPException, status
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.db.models.user import User
 
 _lock = Lock()
@@ -35,6 +36,10 @@ def enforce_rate_limit(key: int, max_requests: int, window_seconds: int) -> None
 
 
 def rate_limit_detection(current_user: User = Depends(get_current_user)) -> None:
-    """Caps expensive AI-inference requests per user (10/minute) to protect
-    the model/CPU from abuse or accidental request loops."""
-    enforce_rate_limit(current_user.id, max_requests=10, window_seconds=60)
+    """Caps expensive AI-inference requests per user to protect the
+    model/CPU from abuse or accidental request loops."""
+    enforce_rate_limit(
+        current_user.id,
+        max_requests=settings.rate_limit_max_requests,
+        window_seconds=settings.rate_limit_window_seconds,
+    )

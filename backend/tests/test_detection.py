@@ -22,6 +22,28 @@ def test_analyze_returns_expected_shape(analyzed_result):
     assert "dima806" in analyzed_result["modelUsed"]
 
 
+def test_analyze_includes_explainability_fields(analyzed_result):
+    """Phase 4: per-frame breakdown, certainty/consistency stats, and
+    heuristics must all be real, well-formed data — not placeholders."""
+    assert isinstance(analyzed_result["frameScores"], list)
+    assert len(analyzed_result["frameScores"]) == analyzed_result["framesProcessed"]
+    assert all(0 <= score <= 100 for score in analyzed_result["frameScores"])
+    assert 0 <= analyzed_result["temporalConsistency"] <= 100
+    assert 0 <= analyzed_result["modelCertainty"] <= 100
+    assert "averageSharpness" in analyzed_result["heuristics"]
+
+
+def test_analyze_includes_video_metadata(analyzed_result):
+    """Phase 4: real container metadata extracted via OpenCV, matching the
+    64x64 synthetic clip the `sample_video_bytes` fixture generates."""
+    metadata = analyzed_result["metadata"]
+    assert metadata["width"] == 64
+    assert metadata["height"] == 64
+    assert metadata["fps"] is not None
+    assert metadata["durationSeconds"] is not None
+    assert metadata["fileSizeBytes"] is not None
+
+
 def test_analyze_requires_authentication(client, sample_video_bytes):
     response = client.post(
         "/api/detection/analyze",
@@ -61,6 +83,33 @@ def test_analyze_rejects_empty_file(client, auth_headers):
     assert response.status_code == 400
 
 
+def test_analyze_rejects_oversized_file(client, auth_headers, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "detection_max_upload_mb", 0)
+
+    valid_mp4_header = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 64
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("big.mp4", valid_mp4_header, "video/mp4")},
+    )
+    assert response.status_code == 413
+    assert "exceeds the maximum allowed size" in response.json()["detail"]
+
+
+def test_analyze_rejects_corrupted_video_body(client, auth_headers):
+    """A file with a genuine MP4 signature but a body OpenCV can't decode
+    must fail validation, not crash the pipeline."""
+    fake_mp4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 200
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("corrupt.mp4", fake_mp4, "video/mp4")},
+    )
+    assert response.status_code == 422
+
+
 def test_history_includes_analyzed_result(client, auth_headers, analyzed_result):
     response = client.get("/api/detection/history", headers=auth_headers)
     assert response.status_code == 200
@@ -93,6 +142,23 @@ def test_get_by_id_is_scoped_to_owner(client, analyzed_result):
         f"/api/detection/{analyzed_result['id']}",
         headers={"Authorization": f"Bearer {other_token}"},
     )
+    assert response.status_code == 404
+
+
+def test_pdf_report_returns_valid_pdf(client, auth_headers, analyzed_result):
+    response = client.get(f"/api/detection/{analyzed_result['id']}/report/pdf", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content[:4] == b"%PDF"
+
+
+def test_pdf_report_requires_authentication(client, analyzed_result):
+    response = client.get(f"/api/detection/{analyzed_result['id']}/report/pdf")
+    assert response.status_code == 401
+
+
+def test_pdf_report_not_found(client, auth_headers):
+    response = client.get("/api/detection/999999/report/pdf", headers=auth_headers)
     assert response.status_code == 404
 
 

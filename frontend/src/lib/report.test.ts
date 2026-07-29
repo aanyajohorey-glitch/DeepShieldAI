@@ -1,20 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { downloadReport } from "./report";
-import type { DetectionResult } from "@/types";
+import { makeDetectionResult } from "@/test-utils/fixtures";
 
-const sampleResult: DetectionResult = {
-  id: 42,
-  filename: "sample.mp4",
-  prediction: "REAL",
-  confidence: 87.3,
-  riskLevel: "Low",
-  avgFrameScore: 12.7,
-  explanation: "Analyzed 5 frames. Average fake-likelihood was 12.7%.",
-  framesProcessed: 5,
-  processingTime: 1.42,
-  modelUsed: "dima806/deepfake_vs_real_image_detection",
-  createdAt: "2026-07-28T12:00:00Z",
-};
+const sampleResult = makeDetectionResult();
 
 describe("downloadReport", () => {
   let createObjectURL: ReturnType<typeof vi.fn>;

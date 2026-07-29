@@ -3,8 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Central application configuration, loaded from environment variables
-    or a local .env file. Add new settings here as future phases introduce
-    them (e.g. AI model paths, storage buckets)."""
+    or a local .env file. This is the single place configurable values live
+    — avoid hardcoding them elsewhere in the app."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    # Deepfake detection
+    # Deepfake detection — model & pipeline
     detection_model_name: str = "dima806/deepfake_vs_real_image_detection"
     detection_upload_dir: str = "./tmp_uploads"
     detection_max_upload_mb: int = 200
@@ -31,6 +31,25 @@ class Settings(BaseSettings):
     detection_frame_sample_seconds: float = 1.0
     detection_max_frames: int = 30
     detection_fake_threshold: float = 0.5
+    detection_max_frame_dimension: int = 720
+    """Frames wider or taller than this (px) are downscaled before inference
+    — the model resizes to its own fixed input size regardless, so this only
+    saves conversion/memory overhead on large source videos."""
+
+    # Explainable AI
+    detection_enable_heatmap: bool = True
+    """Generates an attention-rollout visualization for the most-suspicious
+    sampled frame. Adds one extra forward pass per analysis — disable for
+    lower latency if the visualization isn't needed."""
+    heatmap_dir: str = "./static/heatmaps"
+
+    # Rate limiting
+    rate_limit_max_requests: int = 10
+    rate_limit_window_seconds: int = 60
+
+    # Logging
+    log_dir: str = "./logs"
+    log_level: str = "INFO"
 
 
 settings = Settings()

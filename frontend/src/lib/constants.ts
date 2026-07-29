@@ -18,6 +18,9 @@ export const APP_DESCRIPTION =
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
+/** Backend origin without the `/api` suffix — for static assets like heatmap images. */
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+
 export const AUTH_COOKIE_NAME = "ds_token";
 
 export interface NavItem {

@@ -1,10 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.ai import model_loader
 from app.api.routes import auth, detection, health
@@ -19,12 +21,18 @@ from app.db import models  # noqa: F401
 configure_logging()
 logger = logging.getLogger("deepshield.main")
 
+_STATIC_ROOT = Path(settings.heatmap_dir).parent
+_STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("%s v%s starting up (%s)...", settings.app_name, settings.app_version, settings.environment)
     Base.metadata.create_all(bind=engine)
     model_loader.load_model()
+    logger.info("Startup complete.")
     yield
+    logger.info("%s shutting down.", settings.app_name)
 
 
 app = FastAPI(
@@ -59,6 +67,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(detection.router, prefix="/api")
+
+app.mount("/static", StaticFiles(directory=str(_STATIC_ROOT)), name="static")
 
 
 @app.get("/")

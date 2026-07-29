@@ -1,6 +1,13 @@
 # Claude Code local session state (not shared project config)
 .claude/settings.local.json
 
+# Environment files (never commit real secrets)
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
 # OS
 .DS_Store
 Thumbs.db
@@ -12,7 +19,14 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
+logs/*
+!logs/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
+
+# Generated detection artifacts
+backend/static/heatmaps/*
+!backend/static/heatmaps/.gitkeep
 
 # Datasets & AI artifacts (see datasets/README.md for how to obtain data)
 datasets/raw/*
@@ -29,3 +43,15 @@ datasets/processed/*
 models/*
 !models/.gitkeep
 !models/README.md
+!models/trained/
+!models/checkpoints/
+!models/configs/
+!models/weights/
+models/trained/*
+!models/trained/.gitkeep
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+models/configs/*
+!models/configs/.gitkeep
+models/weights/*
+!models/weights/.gitkeep

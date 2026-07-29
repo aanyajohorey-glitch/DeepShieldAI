@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
+from app.reports.pdf_report import generate_detection_pdf
 from app.schemas.detection import DetectionHistoryResponse, DetectionResult
 from app.services.detection_service import (
     DetectionError,
@@ -29,9 +30,10 @@ def analyze(
     db: Session = Depends(get_db),
 ):
     try:
-        return analyze_video(db, current_user, file)
+        detection = analyze_video(db, current_user, file)
     except DetectionError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error))
+    return DetectionResult.from_detection(detection)
 
 
 @router.get("/history", response_model=DetectionHistoryResponse)
@@ -42,7 +44,7 @@ def history(
     db: Session = Depends(get_db),
 ):
     items, total = get_history(db, current_user, limit=limit, offset=offset)
-    return DetectionHistoryResponse(total=total, items=items)
+    return DetectionHistoryResponse(total=total, items=[DetectionResult.from_detection(item) for item in items])
 
 
 @router.get("/{detection_id}", response_model=DetectionResult)
@@ -54,7 +56,26 @@ def get_by_id(
     detection = get_detection(db, current_user, detection_id)
     if detection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection record not found.")
-    return detection
+    return DetectionResult.from_detection(detection)
+
+
+@router.get("/{detection_id}/report/pdf")
+def get_pdf_report(
+    detection_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    detection = get_detection(db, current_user, detection_id)
+    if detection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection record not found.")
+
+    pdf_bytes = generate_detection_pdf(detection)
+    filename = f"deepshield-report-DS-{detection.id:06d}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/{detection_id}", status_code=status.HTTP_204_NO_CONTENT)
