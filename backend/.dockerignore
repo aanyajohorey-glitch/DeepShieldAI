@@ -4,6 +4,9 @@ __pycache__/
 .env
 *.db
 tmp_uploads/
+test_tmp_uploads/
+logs/
+static/
 tests/
 .pytest_cache/
 .git/

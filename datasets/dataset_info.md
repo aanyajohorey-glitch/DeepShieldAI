@@ -25,10 +25,12 @@ Fields we could not verify from the model's public documentation are marked
 ## Usage in DeepShield AI
 
 DeepShield AI does not retrain or fine-tune this model. It is loaded once at
-backend startup (`app/services/ai_model.py`) and used purely for inference:
-video frames extracted by OpenCV are classified frame-by-frame, and the
-per-frame `Fake` probabilities are averaged to produce the video-level
-verdict, confidence, and risk level (`app/services/detection_service.py`).
+backend startup (`app/ai/model_loader.py`) and used purely for inference:
+video frames extracted by OpenCV are classified frame-by-frame
+(`app/ai/inference.py`), and the per-frame `Fake` probabilities are
+aggregated into the video-level verdict, confidence, and risk level
+(`app/ai/postprocessing.py`, `app/ai/confidence.py`, orchestrated by
+`app/ai/prediction_service.py`).
 
 ## DeepShield AI's own test data (development QA, not a shipped dataset)
 

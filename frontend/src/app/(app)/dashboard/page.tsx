@@ -1,14 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useAuth } from "@/hooks/useAuth";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { ScanActivityChart } from "@/components/dashboard/ScanActivityChart";
 import { AIEngineStatus } from "@/components/dashboard/AIEngineStatus";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { QuickUploadCard } from "@/components/dashboard/QuickUploadCard";
 import { RecentScansCard } from "@/components/dashboard/RecentScansCard";
 import { NotificationsCard } from "@/components/dashboard/NotificationsCard";
 import { STAT_CARDS, STAT_ICONS } from "@/components/dashboard/data";
+import { ChartSkeleton } from "@/components/ui/Skeleton";
+
+// Recharts pulls a sizeable chunk into the bundle — load it only when the
+// dashboard actually renders instead of bundling it into every route.
+const ScanActivityChart = dynamic(
+  () => import("@/components/dashboard/ScanActivityChart").then((m) => m.ScanActivityChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 
 export default function DashboardPage() {
   const { user } = useAuth();

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,6 +8,12 @@ from app.db.base import Base
 
 class Detection(Base):
     __tablename__ = "detections"
+    __table_args__ = (
+        # History queries always filter by user_id and sort by created_at —
+        # a composite index serves both in one lookup instead of an index
+        # scan plus a separate sort.
+        Index("ix_detections_user_id_created_at", "user_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)

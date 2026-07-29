@@ -23,6 +23,8 @@ export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export const AUTH_COOKIE_NAME = "ds_token";
 
+export const GITHUB_URL = "https://github.com/aanyajohorey-glitch/DeepShieldAI";
+
 export interface NavItem {
   label: string;
   href: string;

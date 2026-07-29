@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Globe, Mail, MessageCircle } from "lucide-react";
+import { Code2 } from "lucide-react";
 import { Logo } from "./Logo";
-import { APP_DESCRIPTION } from "@/lib/constants";
+import { APP_DESCRIPTION, GITHUB_URL } from "@/lib/constants";
 
 const footerLinks = {
   Product: [
@@ -15,9 +15,9 @@ const footerLinks = {
     { label: "Create Account", href: "/register" },
   ],
   Resources: [
-    { label: "Documentation", href: "#" },
-    { label: "Security", href: "#" },
-    { label: "Contact", href: "#" },
+    { label: "Documentation", href: GITHUB_URL, external: true },
+    { label: "Source Code", href: GITHUB_URL, external: true },
+    { label: "Report an Issue", href: `${GITHUB_URL}/issues`, external: true },
   ],
 };
 
@@ -32,16 +32,15 @@ export function Footer() {
               {APP_DESCRIPTION}
             </p>
             <div className="mt-6 flex items-center gap-3">
-              {[Globe, Mail, MessageCircle].map((Icon, index) => (
-                <a
-                  key={index}
-                  href="#"
-                  className="flex size-9 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:border-cyan/40 hover:text-cyan"
-                  aria-label="Social link"
-                >
-                  <Icon className="size-4" />
-                </a>
-              ))}
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex size-9 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:border-cyan/40 hover:text-cyan"
+                aria-label="View DeepShield AI on GitHub"
+              >
+                <Code2 className="size-4" />
+              </a>
             </div>
           </div>
 
@@ -49,16 +48,29 @@ export function Footer() {
             <div key={heading}>
               <p className="text-sm font-semibold text-foreground">{heading}</p>
               <ul className="mt-4 space-y-3">
-                {links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-muted transition-colors hover:text-cyan"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
+                {links.map((link) =>
+                  "external" in link && link.external ? (
+                    <li key={link.label}>
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-muted transition-colors hover:text-cyan"
+                      >
+                        {link.label}
+                      </a>
+                    </li>
+                  ) : (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        className="text-sm text-muted transition-colors hover:text-cyan"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  )
+                )}
               </ul>
             </div>
           ))}

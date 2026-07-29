@@ -23,4 +23,6 @@ EXPOSE 8000
 
 # First container start downloads the pretrained model from Hugging Face and
 # caches it in the image layer/volume — expect a slower first boot.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (not exec form) so $PORT expands — PaaS hosts like Render inject
+# their own PORT at runtime; local `docker run`/compose falls back to 8000.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

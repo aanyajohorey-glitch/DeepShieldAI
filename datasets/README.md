@@ -56,10 +56,11 @@ documented training data, class labels, and preprocessing.
 
 ## How this connects to the AI model
 
-`backend/app/services/ai_model.py` loads the model named in
+`backend/app/ai/model_loader.py` loads the model named in
 `Settings.detection_model_name` (`app/core/config.py`) once at startup.
-`detection_service.py` is the only module that calls the model — it never
-touches raw dataset files, only the frames it extracts at request time.
+`app/services/detection_service.py` orchestrates each request through the
+`app/ai/` pipeline — it never touches raw dataset files, only the frames
+extracted at request time.
 
 ## If a future phase adds a training/fine-tuning dataset
 

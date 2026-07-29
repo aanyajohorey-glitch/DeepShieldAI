@@ -102,6 +102,8 @@ def delete_detection(db: Session, user: User, detection_id: int) -> bool:
     detection = get_detection(db, user, detection_id)
     if detection is None:
         return False
+    if detection.heatmap_filename:
+        (Path(settings.heatmap_dir) / detection.heatmap_filename).unlink(missing_ok=True)
     db.delete(detection)
     db.commit()
     logger.info("Detection deleted: user=%s detection_id=%s", user.id, detection_id)

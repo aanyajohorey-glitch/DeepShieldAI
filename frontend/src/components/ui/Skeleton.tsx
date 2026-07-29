@@ -25,3 +25,12 @@ export function CardSkeleton() {
     </div>
   );
 }
+
+export function ChartSkeleton() {
+  return (
+    <div className="glass-card p-6">
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="mt-6 h-48 w-full" />
+    </div>
+  );
+}

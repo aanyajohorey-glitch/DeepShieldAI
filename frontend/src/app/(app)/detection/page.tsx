@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, FileText, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ChartSkeleton } from "@/components/ui/Skeleton";
 import { UploadDropzone } from "@/components/detection/UploadDropzone";
 import { SelectedFilePreview } from "@/components/detection/SelectedFilePreview";
 import { UploadProgress } from "@/components/detection/UploadProgress";
@@ -12,7 +14,6 @@ import { ScanningScreen } from "@/components/detection/ScanningScreen";
 import { VerdictCard } from "@/components/detection/VerdictCard";
 import { ConfidenceMeter } from "@/components/detection/ConfidenceMeter";
 import { ConfidenceMetricsPanel } from "@/components/detection/ConfidenceMetricsPanel";
-import { FrameScoreChart } from "@/components/detection/FrameScoreChart";
 import { AttentionHeatmap } from "@/components/detection/AttentionHeatmap";
 import { ResultMetaGrid } from "@/components/detection/ResultMetaGrid";
 import { AnalysisSummary } from "@/components/detection/AnalysisSummary";
@@ -22,6 +23,11 @@ import { AUTH_COOKIE_NAME } from "@/lib/constants";
 import { downloadReport } from "@/lib/report";
 import { useToast } from "@/hooks/useToast";
 import type { DetectionResult } from "@/types";
+
+const FrameScoreChart = dynamic(
+  () => import("@/components/detection/FrameScoreChart").then((m) => m.FrameScoreChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 
 type Phase = "select" | "uploading" | "processing" | "result" | "error";
 

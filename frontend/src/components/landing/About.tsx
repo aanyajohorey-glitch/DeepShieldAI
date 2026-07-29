@@ -18,7 +18,7 @@ const pillars = [
     icon: Rocket,
     title: "Phased Delivery",
     description:
-      "The platform ships in focused phases, starting with a polished foundation before layering in AI detection.",
+      "Built and shipped across five focused phases — from a polished UI foundation to a fully explainable, production-ready AI detection platform.",
   },
 ];
 

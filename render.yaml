@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: deepshieldai-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+        # Set this after the frontend is deployed to Vercel, e.g.:
+        # https://your-app.vercel.app
+      - key: DETECTION_MODEL_NAME
+        value: dima806/deepfake_vs_real_image_detection
+      - key: DETECTION_MAX_UPLOAD_MB
+        value: "200"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "10"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: LOG_LEVEL
+        value: INFO
+    # Render's free/starter web services use an ephemeral filesystem — the
+    # SQLite database and any generated heatmaps reset on every deploy or
+    # restart. That's fine for a demo/capstone deployment. For real data
+    # persistence, either attach a paid persistent disk (uncomment below,
+    # Starter plan or higher) or migrate DATABASE_URL to a managed Postgres
+    # instance (Render offers a free Postgres tier).
+    # disk:
+    #   name: deepshield-data
+    #   mountPath: /app/data
+    #   sizeGB: 1

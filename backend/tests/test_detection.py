@@ -168,3 +168,29 @@ def test_delete_then_confirm_gone(client, auth_headers, analyzed_result):
 
     get_response = client.get(f"/api/detection/{analyzed_result['id']}", headers=auth_headers)
     assert get_response.status_code == 404
+
+
+def test_delete_removes_heatmap_file(client, auth_headers, sample_video_bytes):
+    """Phase 5: deleting a detection must also remove its heatmap PNG from
+    disk, not just the DB row — otherwise orphaned files accumulate forever."""
+    from pathlib import Path
+
+    from app.core.config import settings
+
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("heatmap_check.mp4", sample_video_bytes, "video/mp4")},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    heatmap_url = data.get("heatmapUrl")
+    if not heatmap_url:
+        pytest.skip("No heatmap generated for this result; nothing to verify cleanup for.")
+
+    heatmap_path = Path(settings.heatmap_dir) / Path(heatmap_url).name
+    assert heatmap_path.exists()
+
+    delete_response = client.delete(f"/api/detection/{data['id']}", headers=auth_headers)
+    assert delete_response.status_code == 204
+    assert not heatmap_path.exists()

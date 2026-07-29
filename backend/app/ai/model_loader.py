@@ -20,7 +20,7 @@ from transformers.pipelines.base import Pipeline
 
 from app.core.config import settings
 
-logger = logging.getLogger("deepshield.ai_model")
+logger = logging.getLogger("deepshield.model_loader")
 
 
 @dataclass

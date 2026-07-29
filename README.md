@@ -1,9 +1,13 @@
 # DeepShield AI
 
+**Version 1.0 — Final Release**
+
 An AI-powered cybersecurity platform for detecting deepfake videos, built as
 an AI & Cybersecurity capstone project. DeepShield AI combines a modern
 security-operations dashboard with a real, explainable deepfake-detection
-pipeline powered by a pretrained Vision Transformer model.
+pipeline powered by a pretrained Vision Transformer model — designed,
+hardened, and documented across five delivery phases into a deployable
+production application.
 
 ## Overview
 
@@ -12,12 +16,14 @@ AI-generated authenticity verdict (`REAL` / `DEEPFAKE`), a confidence score,
 a risk level, a plain-language explanation, a per-frame score breakdown, a
 visual attention heatmap, and a downloadable branded PDF report — all inside
 a polished, dark glassmorphism dashboard modeled on tools like Microsoft
-Defender and CrowdStrike. The platform has been built in phases: Phase 1
-established the UI/auth foundation, Phase 2 wired up real AI-powered video
-analysis, Phase 3 hardened the product (tests, security, deployment
-readiness), and Phase 4 made the AI pipeline explainable and more
-production-grade (richer confidence signals, a visual explanation, PDF
-reporting, structured logging, and centralized configuration).
+Defender and CrowdStrike.
+
+The platform was built in five phases: Phase 1 established the UI/auth
+foundation, Phase 2 wired up real AI-powered video analysis, Phase 3
+hardened the product (tests, security, deployment readiness), Phase 4 made
+the AI pipeline explainable and production-grade, and Phase 5 finalized it
+as a polished, deployable v1.0 — production configuration for Vercel and
+Render, a security audit, performance tuning, and complete documentation.
 
 ## Problem Statement
 
@@ -73,13 +79,24 @@ training infrastructure of their own.
 - **Structured file logging**: rotating log files under `backend/logs/`, capturing startup, uploads, predictions, and errors
 - **Fully centralized configuration**: every previously-hardcoded value (rate limits, frame resize cap, log level) now lives in `Settings`
 - **Performance**: oversized frames are downscaled before color conversion/inference; the model, tokenizer, and image processor are still loaded exactly once at startup
-- **Expanded tests**: 29 backend pytest tests (including large-file rejection, corrupted-media handling, PDF generation, and model-manager validation) and 37 frontend Vitest tests
+- **Expanded tests**: 29 backend pytest tests and 37 frontend Vitest tests
+
+### Phase 5 — Final Release: Polish, Performance, Deployment
+- **Production deployment configuration**: a Render `render.yaml` blueprint (Docker-based backend service, health check, auto-generated `SECRET_KEY`) and a documented zero-config Vercel setup for the frontend — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)
+- **Production-safe configuration**: the app now **refuses to start** if `ENVIRONMENT=production` and `SECRET_KEY` is still the public placeholder value, so it's impossible to accidentally deploy with a forgeable JWT secret; `CORS_ORIGINS` now accepts a plain comma-separated string (not just a JSON array), since that's what most PaaS environment-variable UIs expect
+- **Frontend performance**: chart components (Recharts-based) are now lazy-loaded via `next/dynamic` instead of bundled into every route — cut First Load JS on `/dashboard`, `/detection`, and `/history` by roughly 110KB each
+- **Backend performance**: added a composite database index on `(user_id, created_at)` for history queries
+- **Bug fix**: deleting a scan now also deletes its attention-heatmap file from disk — previously only the database row was removed, leaking image files over time
+- **UI polish**: per-route browser tab titles across the authenticated app, a real favicon matching the brand, dead placeholder footer links replaced with real ones (GitHub source/issues), stale marketing copy corrected
+- **Security audit**: re-confirmed no secrets in source control, hardened `.dockerignore`, fixed a `.gitignore` gap that excluded `frontend/.env.local.example` from git entirely (it had never actually been committed)
+- **Documentation**: this README rewritten as the v1.0 reference, plus a dedicated step-by-step [deployment guide](./docs/DEPLOYMENT.md)
+- **Expanded tests**: 38 backend pytest tests and 37 frontend Vitest tests
 
 ## Technologies Used
 
 **Languages:** TypeScript, Python
 
-**Frontend:** Next.js 15 (App Router), React 19, Tailwind CSS v4, Framer Motion, Recharts, Lucide React, next-themes
+**Frontend:** Next.js 15 (App Router), React 19, Tailwind CSS v4, Framer Motion, Recharts (lazy-loaded), Lucide React, next-themes
 
 **Backend:** FastAPI, SQLAlchemy 2.0, SQLite, Pydantic v2, python-jose (JWT), bcrypt
 
@@ -89,14 +106,14 @@ training infrastructure of their own.
 
 **Testing:** pytest + httpx (backend), Vitest + React Testing Library (frontend)
 
-**Deployment:** Docker, Docker Compose
+**Deployment:** Vercel (frontend), Render (backend, Docker runtime), Docker Compose (self-hosted alternative)
 
-## System Architecture
+## Architecture
 
 ```
 ┌────────────────────┐        HTTPS/JSON         ┌──────────────────────┐
 │   Next.js Frontend  │ ─────────────────────────▶│   FastAPI Backend     │
-│  (App Router, RSC)  │◀───────────────────────── │                       │
+│  (Vercel)            │◀───────────────────────── │   (Render, Docker)    │
 └─────────┬───────────┘        JWT bearer          └───────────┬───────────┘
           │                                                     │
           │ cookie-based session (ds_token)                     │ SQLAlchemy ORM
@@ -148,6 +165,8 @@ training infrastructure of their own.
   pages, `/login` and `/register`, and an authenticated `(app)` group
   (dashboard, detection, history, settings, profile, etc.) guarded by both
   Next.js middleware (edge-level cookie check) and a client-side `ProtectedRoute`.
+  Chart-heavy components are code-split with `next/dynamic` so Recharts
+  only loads on the routes that render a chart.
 - **Backend** — FastAPI app organized by concern: `api/routes` (HTTP layer),
   `services` (request orchestration), `ai` (model loading, preprocessing,
   inference, postprocessing, confidence, explainability — pure AI concerns),
@@ -167,6 +186,9 @@ training infrastructure of their own.
   runs the request against SQLite via SQLAlchemy, and returns camelCase JSON
   (via a shared Pydantic `CamelModel`) that matches the frontend's
   TypeScript types 1:1.
+- **Deployment topology** — the frontend and backend are deployed as two
+  independent services (Vercel + Render) that talk to each other over
+  plain HTTPS/JSON; see [Deployment](#deployment) below.
 
 ## Explainable AI Workflow
 
@@ -237,10 +259,12 @@ full metadata grid — with downloadable text and PDF reports
 The scan is now visible in Detection History for later review or deletion
 ```
 
-## Project Structure
+## Folder Structure
 
 ```
 DeepShieldAI/
+├── docs/
+│   └── DEPLOYMENT.md         Step-by-step Vercel + Render deployment guide
 ├── datasets/                 Dataset documentation (see Dataset section below)
 │   ├── README.md
 │   ├── dataset_info.md
@@ -264,7 +288,7 @@ DeepShieldAI/
 │   │   │                         prediction_service.py — orchestrates the above
 │   │   │                         errors.py
 │   │   ├── api/routes/        HTTP endpoints (auth, detection, health)
-│   │   ├── core/              Config (Settings) and security (JWT, hashing)
+│   │   ├── core/              Config (Settings, with production safety checks) and security (JWT, hashing)
 │   │   ├── db/                 SQLAlchemy engine/session and models (User, Detection)
 │   │   ├── reports/            pdf_report.py — branded PDF template (ReportLab)
 │   │   ├── schemas/            Pydantic request/response models
@@ -273,14 +297,17 @@ DeepShieldAI/
 │   │   └── main.py             App factory, middleware, exception handler, static mount, router mounting
 │   ├── static/heatmaps/        Generated attention heatmap images (gitignored)
 │   ├── logs/                    Rotating application log files (gitignored)
-│   ├── tests/                   pytest suite (health, auth, detection, model manager)
+│   ├── tests/                   pytest suite (health, auth, detection, model manager, config)
 │   ├── requirements.txt
 │   ├── requirements-dev.txt    Adds pytest + httpx for running tests
 │   ├── Dockerfile
+│   ├── .dockerignore
 │   └── .env.example
 ├── frontend/                  Next.js 15 application
 │   ├── src/
 │   │   ├── app/                Routes: landing, auth, and the authenticated (app) group
+│   │   │                         (each authenticated route has its own layout.tsx for a page title)
+│   │   │                         icon.svg — brand favicon
 │   │   ├── components/         ui/ (design system), layout/, landing/, dashboard/, detection/, history/, settings/, auth/
 │   │   ├── context/             AuthContext (session state)
 │   │   ├── lib/                 API client, constants, utils, report generator
@@ -291,8 +318,10 @@ DeepShieldAI/
 │   ├── *.test.ts(x)            Vitest + React Testing Library tests, colocated with the code they cover
 │   ├── Dockerfile
 │   └── vitest.config.ts
+├── render.yaml                Render Blueprint (backend deployment config)
 ├── docker-compose.yml
 ├── README.md
+├── LICENSE
 └── .gitignore
 ```
 
@@ -331,8 +360,8 @@ copy .env.example .env
 ```
 
 The first startup downloads the pretrained model (~330MB) from the Hugging
-Face Hub and caches it locally; subsequent restarts are fast. API docs are
-available at `http://localhost:8000/docs`.
+Face Hub and caches it locally; subsequent restarts are fast. Interactive
+API docs are available at `http://localhost:8000/docs`.
 
 ### Frontend setup
 
@@ -345,24 +374,95 @@ npm run dev
 
 App available at `http://localhost:3000`.
 
+## Local Development
+
+- Both dev servers support hot reload (`uvicorn --reload`, `next dev`) —
+  no rebuild needed for most code changes.
+- The backend creates its SQLite database file and `logs/`/`static/`
+  directories automatically on first run; delete `backend/deepshield.db` to
+  reset local data (there's no migration tool yet — see Future Improvements).
+- Run both test suites before committing (see [Testing](#testing) below).
+- `ENVIRONMENT` defaults to `development`, which allows the default
+  `SECRET_KEY` placeholder to work locally without extra setup — this is
+  intentionally rejected once `ENVIRONMENT=production` (see
+  [Environment Variables](#environment-variables)).
+
+## Deployment
+
+DeepShield AI deploys as two independent services: the frontend on
+**Vercel**, the backend on **Render**. Full step-by-step instructions,
+including exact dashboard settings and troubleshooting, are in
+**[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)** — the summary below covers
+the essentials.
+
+### Backend → Render
+
+The backend deploys as a **Docker** web service (needed for OpenCV's system
+library dependency and the pinned PyTorch CPU wheel) using the repo's
+`render.yaml` blueprint:
+
+| Setting | Value |
+|---|---|
+| Runtime | Docker (`backend/Dockerfile`) |
+| Start command | Baked into the image: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health check | `/api/health` |
+| Required env vars | `ENVIRONMENT=production`, `SECRET_KEY` (auto-generated by the blueprint), `CORS_ORIGINS` (set after the frontend is deployed) |
+
+### Frontend → Vercel
+
+Zero-config — Vercel auto-detects Next.js. The only settings that matter
+for this repo (a monorepo with the frontend in a subfolder):
+
+| Setting | Value |
+|---|---|
+| Root Directory | `frontend` |
+| Framework Preset | Next.js (auto-detected) |
+| Build Command | `next build` (default) |
+| Output Directory | `.next` (default) |
+| Env var | `NEXT_PUBLIC_API_URL` = your Render backend URL + `/api` |
+
+### Docker Compose (self-hosted alternative)
+
+Both services can also run together on your own infrastructure:
+
+```powershell
+$env:SECRET_KEY = "generate-a-long-random-value"
+docker compose up --build
+```
+
+This builds and starts both services: backend on `:8000`, frontend on
+`:3000`. The SQLite database persists in a named volume (`backend_data`)
+across container restarts. **These Dockerfiles have not been verified with
+an actual Docker build in this development environment** (Docker isn't
+installed here) — review them before relying on them in production.
+
+### Production checklist
+
+- [ ] Real `SECRET_KEY` set wherever `ENVIRONMENT=production` (the app refuses to start otherwise — this is enforced in code, not just documented)
+- [ ] `CORS_ORIGINS` set to your real frontend origin(s) only
+- [ ] `NEXT_PUBLIC_API_URL` set to your real backend URL before the frontend builds
+- [ ] Backend served over HTTPS (Render provides this automatically)
+- [ ] `.env` files confirmed not committed (they aren't tracked — see `.gitignore`)
+- [ ] Decided whether persistent storage (disk or managed Postgres) is needed, or ephemeral storage is acceptable for your use case
+
 ## Environment Variables
 
 Neither `.env` file is committed — copy the `.example` file in each folder
-and adjust as needed. No secrets ship in this repo; `SECRET_KEY` below must
-be replaced with your own value before any real deployment.
+and adjust as needed. No secrets ship in this repo.
 
 **`backend/.env`** (copy from `backend/.env.example`):
 
 | Variable | Purpose |
 |---|---|
-| `APP_NAME`, `ENVIRONMENT` | App metadata shown on `/api/health` |
+| `APP_NAME`, `ENVIRONMENT` | App metadata; `ENVIRONMENT=production` also enables the `SECRET_KEY` safety check below |
 | `DATABASE_URL` | SQLAlchemy connection string (defaults to local SQLite) |
-| `SECRET_KEY` | JWT signing secret — **replace before deploying** |
+| `SECRET_KEY` | JWT signing secret. **Startup fails if this is left at its default placeholder while `ENVIRONMENT=production`** |
 | `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT configuration |
-| `CORS_ORIGINS` | Allowed frontend origins |
+| `CORS_ORIGINS` | Allowed frontend origins — accepts a JSON array or a plain comma-separated string |
 | `DETECTION_MODEL_NAME` | Hugging Face model id to load for inference |
 | `DETECTION_UPLOAD_DIR` | Temp directory for in-flight uploads (auto-cleaned) |
 | `DETECTION_MAX_UPLOAD_MB` | Upload size cap |
+| `DETECTION_ALLOWED_EXTENSIONS` | Allowed upload extensions — JSON array or comma-separated string (optional, has a sensible default) |
 | `DETECTION_FRAME_SAMPLE_SECONDS`, `DETECTION_MAX_FRAMES` | Frame sampling rate/cap |
 | `DETECTION_FAKE_THRESHOLD` | Score threshold for a `DEEPFAKE` verdict |
 | `DETECTION_MAX_FRAME_DIMENSION` | Frames larger than this (px, longest edge) are downscaled before inference |
@@ -375,12 +475,37 @@ be replaced with your own value before any real deployment.
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | Base URL the frontend calls for the FastAPI backend |
+| `NEXT_PUBLIC_API_URL` | Base URL the frontend calls for the FastAPI backend. Inlined at **build time** — changing it requires a rebuild/redeploy |
+
+## API Documentation
+
+The backend auto-generates interactive OpenAPI docs at `/docs` (Swagger UI)
+and `/redoc` on any running instance — e.g. `http://localhost:8000/docs`
+locally, or `https://<your-render-service>.onrender.com/docs` once
+deployed. That's the authoritative, always-current reference for request/
+response shapes. Summary of the main routes:
+
+| Method | Path | Purpose | Auth |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | Create an account | No |
+| `POST` | `/api/auth/login` | Get a JWT access token | No |
+| `GET` | `/api/auth/me` | Current user profile | Yes |
+| `POST` | `/api/detection/analyze` | Upload a video and run detection | Yes (rate-limited) |
+| `GET` | `/api/detection/history` | Paginated scan history | Yes |
+| `GET` | `/api/detection/{id}` | A single scan's full result | Yes |
+| `GET` | `/api/detection/{id}/report/pdf` | Download a branded PDF report | Yes |
+| `DELETE` | `/api/detection/{id}` | Delete a scan (and its heatmap file) | Yes |
+| `GET` | `/api/health` | Liveness/health check | No |
+
+All authenticated routes expect `Authorization: Bearer <token>`. Detection
+routes are scoped to the requesting user — one user can never read,
+download, or delete another user's scans (enforced server-side, covered by
+tests).
 
 ## Usage Instructions
 
-1. Start the backend and frontend (see Installation above).
-2. Visit `http://localhost:3000`, click **Get Started**, and register an account.
+1. Start the backend and frontend (see Installation above), or use the deployed URLs.
+2. Visit the app, click **Get Started**, and register an account.
 3. From the dashboard sidebar, open **Detection**.
 4. Drag and drop a video (or click to browse) — MP4, MOV, AVI, or MKV, up to 200MB.
 5. Click **Analyze Video** and watch the live upload progress, then the animated analysis screen.
@@ -398,13 +523,14 @@ cd backend
 .\venv\Scripts\python.exe -m pytest -v
 ```
 
-29 tests, run against an isolated SQLite file (never your dev
+38 tests, run against an isolated SQLite file (never your dev
 `deepshield.db`), exercising the **real** AI model end-to-end: a full
 upload → frame extraction → inference → aggregation → explainability pass
 on a small synthetic video generated on the fly; auth; large-file and
 corrupted-media rejection; PDF report generation; model-manager validation;
-and authorization-scoping checks (a user can't view, delete, or download a
-report for another user's scans).
+production configuration safety checks (`SECRET_KEY`/`CORS_ORIGINS`
+parsing); heatmap-file cleanup on delete; and authorization-scoping checks
+(a user can't view, delete, or download a report for another user's scans).
 
 ### Frontend (Vitest + React Testing Library)
 
@@ -414,57 +540,8 @@ npm run test
 ```
 
 37 tests covering formatting/validation utilities, the report generator,
-and key UI components — including the new per-frame chart, confidence
-panel, and attention-heatmap components.
-
-## Deployment
-
-### Docker (recommended)
-
-Dockerfiles are provided for both services (`backend/Dockerfile`,
-`frontend/Dockerfile`, multi-stage using Next's `standalone` output) along
-with a root `docker-compose.yml`. **These have not been verified with an
-actual Docker build in this environment** (Docker isn't installed here) —
-review them before relying on them in production. If you add a persistent
-volume for the backend's `static/` and `logs/` directories, generated
-heatmaps and logs will survive container restarts too (only the SQLite
-database is currently volume-mounted).
-
-```powershell
-$env:SECRET_KEY = "generate-a-long-random-value"
-docker compose up --build
-```
-
-This builds and starts both services: backend on `:8000`, frontend on
-`:3000`. The SQLite database persists in a named volume (`backend_data`)
-across container restarts.
-
-### Manual / non-Docker deployment
-
-- **Backend**: run behind a production ASGI setup (e.g. `uvicorn` with
-  multiple workers behind a reverse proxy, or Gunicorn with the
-  `uvicorn.workers.UvicornWorker` class). Set `ENVIRONMENT=production`,
-  a real `SECRET_KEY`, and `CORS_ORIGINS` restricted to your actual frontend
-  domain. The in-memory rate limiter and model singleton are per-process —
-  running multiple workers means each gets its own copy of both (multiple
-  model loads = more memory; rate limits become per-worker, not global).
-- **Frontend**: `npm run build && npm start`, or deploy the standalone
-  output (`.next/standalone`) directly. Set `NEXT_PUBLIC_API_URL` to your
-  deployed backend's public URL **at build time** (it's inlined into the
-  client bundle, not read at runtime).
-- **Database**: SQLite is fine for a single-instance deployment; for
-  anything with concurrent writers at scale, migrate to Postgres by
-  changing `DATABASE_URL` (SQLAlchemy handles the rest, though you'll want
-  to add a migration tool — see Future Improvements).
-
-### Production checklist
-
-- [ ] Generate a fresh `SECRET_KEY` (never reuse the example/dev value)
-- [ ] Set `CORS_ORIGINS` to your real frontend origin(s) only
-- [ ] Set `NEXT_PUBLIC_API_URL` to your real backend URL before building the frontend
-- [ ] Put the backend behind HTTPS (a reverse proxy like Caddy/nginx is the simplest path)
-- [ ] Confirm `.env` files are not committed (they aren't tracked — see `.gitignore`)
-- [ ] Decide whether `static/` (heatmaps) and `logs/` need persistent volumes for your deployment
+and key UI components — including the per-frame chart, confidence panel,
+and attention-heatmap components.
 
 ## Future Improvements
 
@@ -476,5 +553,11 @@ across container restarts.
 - Add password reset, email verification, and two-factor authentication
 - Add a database migration tool (e.g. Alembic) — schema changes currently require recreating the local dev database
 - Move the rate limiter and model cache to a shared store (e.g. Redis) if scaling to multiple backend workers
+- Migrate `DATABASE_URL` to a managed Postgres instance for real data persistence on PaaS hosts with ephemeral disks
+- Add a retention/cleanup policy for generated heatmap images if the app ever runs with high scan volume and persistent storage
 - Re-introduce a face-presence heuristic using `cv2.FaceDetectorYN` (OpenCV 5 dropped the bundled Haar cascades this project originally used) — deferred because it requires downloading and caching an external ONNX model
 - Support multiple/ensemble models via the `ModelManager`'s existing `switch_model()` capability, once a second model is worth adding
+
+## License
+
+Released under the [MIT License](./LICENSE).

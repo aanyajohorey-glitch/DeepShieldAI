@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Cookies from "js-cookie";
 import { Download, FileText } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
+import { ChartSkeleton } from "@/components/ui/Skeleton";
 import { VerdictCard } from "@/components/detection/VerdictCard";
 import { ConfidenceMeter } from "@/components/detection/ConfidenceMeter";
 import { ConfidenceMetricsPanel } from "@/components/detection/ConfidenceMetricsPanel";
-import { FrameScoreChart } from "@/components/detection/FrameScoreChart";
 import { AttentionHeatmap } from "@/components/detection/AttentionHeatmap";
 import { AnalysisSummary } from "@/components/detection/AnalysisSummary";
 import { ResultMetaGrid } from "@/components/detection/ResultMetaGrid";
@@ -17,6 +18,11 @@ import { downloadPdfReport, ApiRequestError } from "@/lib/api";
 import { AUTH_COOKIE_NAME } from "@/lib/constants";
 import { useToast } from "@/hooks/useToast";
 import type { DetectionResult } from "@/types";
+
+const FrameScoreChart = dynamic(
+  () => import("@/components/detection/FrameScoreChart").then((m) => m.FrameScoreChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 
 interface DetectionDetailDialogProps {
   result: DetectionResult | null;
