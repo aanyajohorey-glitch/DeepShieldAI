@@ -56,8 +56,17 @@ class Settings(BaseSettings):
     # detection_allowed_image_extensions (below) is the new, additive one.
     detection_allowed_extensions: list[str] = [".mp4", ".mov", ".avi", ".mkv"]
     detection_allowed_image_extensions: list[str] = [".jpg", ".jpeg", ".png", ".webp"]
-    detection_frame_sample_seconds: float = 1.0
-    detection_max_frames: int = 30
+    detection_frame_sample_seconds: float = 2.0
+    detection_max_frames: int = 10
+    """These two govern video frame sampling only — image uploads never call
+    extract_frames(). Kept lower than the Phase 4 defaults (1.0s / 30
+    frames) since F3-Net + MTCNN face cropping cost roughly 3-4s/frame on
+    CPU in this project's testing (each frame needs its own face-detection
+    pass plus a full Xception forward pass) — the old per-frame ViT image
+    classifier was far cheaper per frame. 30 frames at that cost risks
+    exceeding typical reverse-proxy timeouts (Cloudflare Tunnel, Render,
+    browsers) before a response ever comes back. Raise these if you have
+    GPU inference or don't mind longer waits."""
     detection_fake_threshold: float = 0.5
     detection_max_frame_dimension: int = 720
     """Frames wider or taller than this (px) are downscaled before inference
