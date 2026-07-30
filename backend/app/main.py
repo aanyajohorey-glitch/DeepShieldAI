@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
     logger.info("%s v%s starting up (%s)...", settings.app_name, settings.app_version, settings.environment)
     Base.metadata.create_all(bind=engine)
     model_loader.load_model()
+    model_loader.load_video_model()
     logger.info("Startup complete.")
     yield
     logger.info("%s shutting down.", settings.app_name)

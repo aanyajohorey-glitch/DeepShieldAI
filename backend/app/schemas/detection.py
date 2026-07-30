@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 Prediction = Literal["REAL", "DEEPFAKE"]
 RiskLevel = Literal["Low", "Medium", "High"]
+FileType = Literal["image", "video"]
 
 
 class VideoMetadata(CamelModel):
@@ -23,6 +24,7 @@ class VideoMetadata(CamelModel):
 class DetectionResult(CamelModel):
     id: int
     filename: str
+    file_type: FileType
     prediction: Prediction
     confidence: float
     risk_level: RiskLevel
@@ -51,6 +53,7 @@ class DetectionResult(CamelModel):
         return cls(
             id=detection.id,
             filename=detection.filename,
+            file_type=detection.file_type,
             prediction=detection.prediction,
             confidence=detection.confidence,
             risk_level=detection.risk_level,

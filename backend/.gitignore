@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 tmp_uploads/
 test_tmp_uploads/
+
+# Downloaded tool binary (local tunneling), not part of the app
+cloudflared.exe

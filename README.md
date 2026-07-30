@@ -1,29 +1,34 @@
 # DeepShield AI
 
-**Version 1.0 — Final Release**
+**Version 1.1 — Dual Detection System**
 
-An AI-powered cybersecurity platform for detecting deepfake videos, built as
-an AI & Cybersecurity capstone project. DeepShield AI combines a modern
-security-operations dashboard with a real, explainable deepfake-detection
-pipeline powered by a pretrained Vision Transformer model — designed,
-hardened, and documented across five delivery phases into a deployable
-production application.
+An AI-powered cybersecurity platform for detecting deepfake images and
+videos, built as an AI & Cybersecurity capstone project. DeepShield AI
+combines a modern security-operations dashboard with two purpose-built,
+explainable deepfake-detection pipelines — a Vision Transformer for still
+images and a frequency-domain CNN (F3-Net) for video — chosen automatically
+based on what's uploaded, with no manual model selection.
 
 ## Overview
 
-DeepShield AI lets an authenticated user upload a video and receive an
-AI-generated authenticity verdict (`REAL` / `DEEPFAKE`), a confidence score,
-a risk level, a plain-language explanation, a per-frame score breakdown, a
-visual attention heatmap, and a downloadable branded PDF report — all inside
-a polished, dark glassmorphism dashboard modeled on tools like Microsoft
-Defender and CrowdStrike.
+DeepShield AI lets an authenticated user upload a video **or a still image**
+and receive an AI-generated authenticity verdict (`REAL` / `DEEPFAKE`), a
+confidence score, a risk level, a plain-language explanation, a per-frame
+score breakdown (video) or single-frame score (image), and a downloadable
+branded PDF report — all inside a polished, dark glassmorphism dashboard
+modeled on tools like Microsoft Defender and CrowdStrike. Which detector
+runs is chosen automatically from the file extension; the user never picks
+a model.
 
-The platform was built in five phases: Phase 1 established the UI/auth
+The platform was built in six phases: Phase 1 established the UI/auth
 foundation, Phase 2 wired up real AI-powered video analysis, Phase 3
 hardened the product (tests, security, deployment readiness), Phase 4 made
-the AI pipeline explainable and production-grade, and Phase 5 finalized it
-as a polished, deployable v1.0 — production configuration for Vercel and
-Render, a security audit, performance tuning, and complete documentation.
+the AI pipeline explainable and production-grade, Phase 5 finalized it as a
+polished, deployable v1.0 (production configuration for Vercel and Render, a
+security audit, performance tuning, complete documentation), and Phase 6
+added still-image detection and replaced the video pipeline with a
+purpose-built video-forgery model (F3-Net) instead of running the image
+classifier per-frame.
 
 ## Problem Statement
 
@@ -92,6 +97,17 @@ training infrastructure of their own.
 - **Documentation**: this README rewritten as the v1.0 reference, plus a dedicated step-by-step [deployment guide](./docs/DEPLOYMENT.md)
 - **Expanded tests**: 38 backend pytest tests and 37 frontend Vitest tests
 
+### Phase 6 — Dual Detection System (Image + Video)
+- **Automatic file-type routing**: uploads are classified by extension — `.jpg`/`.jpeg`/`.png`/`.webp` → image detector, `.mp4`/`.mov`/`.avi`/`.mkv` → video detector — with no manual model choice, via `app/ai/preprocessing.py`'s `classify_file_type()`
+- **Still-image detection**: the existing dima806 ViT classifier now has its own dedicated entry point (`app/ai/image_detector.py`) for actual photo uploads, reusing the same confidence/risk/heuristics/PDF machinery as before
+- **New video detector — F3-Net**: replaced the old "run the image classifier on every frame" approach with [F3-Net](https://github.com/SCLBD/DeepfakeBench) (Frequency in Face Forgery Network), a real published face-forgery detector using a frequency-domain decomposition (DCT-based band-pass filters) feeding an Xception backbone — a fundamentally different architecture from the image pipeline, chosen because per-frame still-image classification has no way to use frequency-domain forgery signal
+- **Face-aware video preprocessing**: sampled frames are now face-detected and cropped (via [MTCNN](https://github.com/timesler/facenet-pytorch)) before being scored — frames with no visible face are skipped rather than fed to the model blind; a video with no detectable face in any frame is rejected with a clear error rather than silently scored on noise
+- **Automatic model weight management**: F3-Net's checkpoint (~86MB) downloads automatically from DeepfakeBench's GitHub release on first use and is cached in `models/weights/` — never committed to git, matching the existing pattern for the image model
+- **Both models load once at startup**, mirrored in a new `VideoModelManager` alongside the existing image `ModelManager` — no per-request reloading for either
+- **Honest scope on preprocessing**: DeepfakeBench's original preprocessing uses `dlib`, which has no prebuilt wheel for this project's Python version and would require a full C++ build toolchain to compile from source. MTCNN (pure PyTorch, pip-installable) is used instead — verified against real face photos to produce correct detections before being wired into the pipeline. See `models/README.md` for the full writeup, including the **CC BY-NC 4.0 (non-commercial) license** on the F3-Net checkpoint
+- **No attention heatmap for video results**: F3-Net has no transformer attention to roll out (the existing heatmap technique is ViT-specific), so video results honestly omit it rather than fabricating a visualization the model doesn't support — image results still get one
+- **Expanded tests**: 46 backend pytest tests (image upload/routing, F3-Net video inference through the real HTTP API, no-face rejection, image-specific PDF generation) and unchanged 37 frontend Vitest tests
+
 ## Technologies Used
 
 **Languages:** TypeScript, Python
@@ -100,7 +116,7 @@ training infrastructure of their own.
 
 **Backend:** FastAPI, SQLAlchemy 2.0, SQLite, Pydantic v2, python-jose (JWT), bcrypt
 
-**AI/ML:** Hugging Face `transformers`, PyTorch (CPU by default, GPU if available), OpenCV (`opencv-python-headless`), Pillow
+**AI/ML:** Hugging Face `transformers` (image model), PyTorch + torchvision (CPU by default, GPU if available), F3-Net (vendored, video model — DeepfakeBench), facenet-pytorch/MTCNN (face detection), OpenCV (`opencv-python-headless`), Pillow
 
 **Reporting:** ReportLab (server-side PDF generation)
 
@@ -134,23 +150,36 @@ training infrastructure of their own.
                                                         ┌────────────────────────┐
                                                         │        app/ai/          │
                                                         │ preprocessing.py         │
-                                                        │  frame extraction,       │
+                                                        │  routing (image/video),  │
                                                         │  magic-byte validation,  │
-                                                        │  video metadata          │
-                                                        │ inference.py             │
-                                                        │  raw batched model calls │
+                                                        │  frame/image extraction  │
+                                                        │                          │
+                                                        │  ── image path ──        │
+                                                        │ image_detector.py        │
+                                                        │  → inference.py          │
+                                                        │    (dima806 ViT)         │
+                                                        │                          │
+                                                        │  ── video path ──        │
+                                                        │ video_detector.py        │
+                                                        │  → face_detection.py     │
+                                                        │    (MTCNN crop)          │
+                                                        │  → models/f3net.py       │
+                                                        │    (F3-Net, DeepfakeBench)│
+                                                        │                          │
+                                                        │  ── shared ──            │
                                                         │ postprocessing.py        │
                                                         │  score → verdict         │
                                                         │ confidence.py            │
                                                         │  certainty / consistency │
                                                         │ explainability.py        │
-                                                        │  attention heatmap,      │
+                                                        │  attention heatmap*,     │
                                                         │  heuristics, explanation │
                                                         │ prediction_service.py    │
                                                         │  orchestrates the above  │
                                                         │ model_loader.py          │
-                                                        │  ModelManager singleton, │
-                                                        │  loaded once at startup  │
+                                                        │  ModelManager (image) +  │
+                                                        │  VideoModelManager,      │
+                                                        │  both loaded at startup  │
                                                         └────────────────────────┘
                                                                      │
                                                                      ▼
@@ -160,6 +189,8 @@ training infrastructure of their own.
                                                         │  PDF template (ReportLab)│
                                                         └────────────────────────┘
 ```
+*Attention heatmaps are only generated for image results — F3-Net (video)
+has no transformer attention to roll out.
 
 - **Frontend** — Next.js App Router with route groups: public marketing
   pages, `/login` and `/register`, and an authenticated `(app)` group
@@ -172,15 +203,25 @@ training infrastructure of their own.
   inference, postprocessing, confidence, explainability — pure AI concerns),
   `reports` (PDF templates), `db/models` (SQLAlchemy tables), `schemas`
   (Pydantic request/response contracts), `utils` (logging, rate limiting).
-- **AI model** — A Hugging Face `image-classification` pipeline is loaded
-  once during the FastAPI `lifespan` startup hook via `ModelManager` (never
-  per-request) and reused for every scan. The heatmap pass temporarily
-  switches the model's attention implementation from the default fused
-  `sdpa` kernel (fast, but doesn't expose attention weights) to `eager`
-  just for that one forward pass, then switches back — regular inference
-  is unaffected.
-- **Static files** — attention heatmaps are saved under `backend/static/`
-  and served directly by FastAPI's `StaticFiles` at `/static/...`.
+- **Two AI models, chosen automatically** — `app/ai/preprocessing.py`
+  classifies every upload as `image` or `video` from its extension and
+  routes it accordingly; the user never selects a model.
+  - **Image** — a Hugging Face `image-classification` pipeline
+    (`dima806/deepfake_vs_real_image_detection`), loaded once during the
+    FastAPI `lifespan` startup hook via `ModelManager`. The heatmap pass
+    temporarily switches the model's attention implementation from the
+    default fused `sdpa` kernel (fast, but doesn't expose attention weights)
+    to `eager` just for that one forward pass, then switches back —
+    regular inference is unaffected.
+  - **Video** — F3-Net (a real published face-forgery detector from
+    DeepfakeBench), loaded once via a separate `VideoModelManager`. Sampled
+    frames are face-cropped with MTCNN first; F3-Net decomposes each crop
+    into frequency bands (DCT-based band-pass filters) before an Xception
+    backbone scores it. The checkpoint is DeepfakeBench's own released
+    weights, downloaded automatically on first use — nothing is trained.
+- **Static files** — attention heatmaps (image results only) are saved
+  under `backend/static/` and served directly by FastAPI's `StaticFiles`
+  at `/static/...`.
 - **Database/API flow** — Frontend calls `/api/auth/*` and
   `/api/detection/*` with a JWT bearer token; FastAPI validates the token,
   runs the request against SQLite via SQLAlchemy, and returns camelCase JSON
@@ -192,43 +233,52 @@ training infrastructure of their own.
 
 ## Explainable AI Workflow
 
-DeepShield AI's model is a binary Vision Transformer classifier — it scores
-each frame as Real or Fake, nothing more granular. Rather than inventing
-manipulation categories it can't actually detect, the explainability layer
-builds a genuinely informative picture from what the pipeline *does*
-compute:
+Neither model claims to identify *why* something looks fake (e.g.
+face-swap vs. compression artifact) — both are binary Real/Fake
+classifiers. Rather than inventing manipulation categories they can't
+actually detect, the explainability layer builds a genuinely informative
+picture from what each pipeline *does* compute — and is honest about what
+differs between the two:
 
 ```
-Sampled frames
-      ↓
-inference.py → one fake-likelihood score per frame (raw model output)
-      ↓
-postprocessing.py → aggregate scores into an overall REAL/DEEPFAKE verdict
+Image upload                              Video upload
+      ↓                                          ↓
+image_detector.py                         video_detector.py
+ → inference.py                            → face_detection.py (MTCNN crop
+   (dima806 ViT, 1 score)                     per sampled frame; frames with
+                                               no face are skipped)
+                                            → models/f3net.py (F3-Net:
+                                              frequency decomposition +
+                                              Xception, 1 score per face)
+      ↓                                          ↓
+postprocessing.py → aggregate score(s) into an overall REAL/DEEPFAKE verdict
       ↓
 confidence.py → confidence %, risk level, temporal consistency (score
-                 variance across frames), model certainty (distance from
-                 the decision threshold)
+                 variance — only meaningful with 2+ scores), model certainty
+                 (distance from that model's own decision threshold)
       ↓
 explainability.py →
-   • attention rollout on the most-suspicious frame (real ViT attention
-     weights, not a generic saliency approximation) → heatmap image
-   • supplementary sharpness heuristic (Laplacian variance)
+   • attention rollout heatmap — IMAGE RESULTS ONLY (real ViT attention
+     weights; F3-Net has no transformer attention to roll out, so video
+     results honestly omit this rather than faking a visualization)
+   • supplementary sharpness heuristic (Laplacian variance) — both paths
    • a plain-language explanation stitching all of the above together,
-     including an explicit note that manipulation *type* isn't identified
+     with wording that differs for "the image" vs. "the video"
       ↓
-Persisted + returned: verdict, confidence, risk level, per-frame scores,
-temporal consistency, model certainty, heuristics, heatmap URL, explanation
+Persisted + returned: verdict, confidence, risk level, per-frame/image
+scores, temporal consistency, model certainty, heuristics, heatmap URL
+(image only), explanation, file type, model used
 ```
 
 This is surfaced in the UI as: a verdict card, a circular confidence meter,
 a per-frame bar chart, a certainty/consistency panel, the attention heatmap
-image, and the full analysis-summary paragraph — plus all of it in the
-downloadable PDF report.
+image (when present), and the full analysis-summary paragraph — plus all of
+it in the downloadable PDF report.
 
 ## Complete Workflow
 
 ```
-User uploads a video (drag-and-drop or browse)
+User uploads a video or image (drag-and-drop or browse)
         ↓
 Frontend validation (extension + size, instant feedback)
         ↓
@@ -236,16 +286,25 @@ Streaming upload to the backend (real progress bar, cancel supported)
         ↓
 Backend re-validates: extension, magic-byte signature, size, rate limit
         ↓
-OpenCV extracts video metadata (resolution, fps, duration, codec) and
-sampled frames (configurable sampling, oversized frames downscaled first)
-        ↓
-Pretrained ViT model runs batched inference on the sampled frames
-        ↓
+File type classified automatically from its extension — no user choice
+        │
+        ├─ IMAGE ─────────────────────────────────────────────┐
+        │  Pillow decodes and validates the image              │
+        │  Pretrained ViT model runs inference on it            │
+        │                                                       │
+        └─ VIDEO ─────────────────────────────────────────────┤
+           OpenCV extracts video metadata (resolution, fps,     │
+           duration, codec) and sampled frames                  │
+           MTCNN crops a face from each sampled frame            │
+           (frames with no detected face are skipped)            │
+           F3-Net runs inference on each face crop                │
+                                                                   ▼
 Scores are aggregated → verdict, confidence, risk level
         ↓
 Confidence stats computed → temporal consistency, model certainty
         ↓
-Explainability generated → attention heatmap, heuristics, explanation text
+Explainability generated → heuristics, explanation text
+                            (+ attention heatmap, image results only)
         ↓
 Result persisted to SQLite, scoped to the requesting user; structured logs
 written for the upload and the prediction
@@ -253,8 +312,9 @@ written for the upload and the prediction
 JSON response returned to the frontend
         ↓
 Results dashboard renders: verdict card, confidence meter, analysis
-summary, per-frame chart, certainty/consistency panel, attention heatmap,
-full metadata grid — with downloadable text and PDF reports
+summary, per-frame/image chart, certainty/consistency panel, attention
+heatmap (if present), full metadata grid — with downloadable text and PDF
+reports
         ↓
 The scan is now visible in Detection History for later review or deletion
 ```
@@ -275,17 +335,22 @@ DeepShieldAI/
 │   ├── trained/               Reserved for future fine-tuned model exports (gitignored)
 │   ├── checkpoints/           Reserved for future training checkpoints (gitignored)
 │   ├── configs/                Reserved for future model config files (gitignored)
-│   └── weights/                Reserved for future local weight files (gitignored)
+│   └── weights/                F3-Net checkpoint downloads here at runtime (gitignored)
 ├── backend/                  FastAPI application
 │   ├── app/
 │   │   ├── ai/                 AI concerns only:
-│   │   │                         model_loader.py — ModelManager singleton
-│   │   │                         preprocessing.py — validation, frame extraction, video metadata
-│   │   │                         inference.py — raw batched model calls
-│   │   │                         postprocessing.py — score → verdict aggregation
-│   │   │                         confidence.py — certainty / temporal consistency stats
-│   │   │                         explainability.py — attention heatmap, heuristics, explanation text
-│   │   │                         prediction_service.py — orchestrates the above
+│   │   │                         model_loader.py — ModelManager (image) + VideoModelManager
+│   │   │                         preprocessing.py — validation, file-type routing, frame/image extraction
+│   │   │                         image_detector.py — still-image entry point (dima806 ViT)
+│   │   │                         inference.py — raw batched image-model calls
+│   │   │                         video_detector.py — video entry point (F3-Net + face crops)
+│   │   │                         face_detection.py — MTCNN wrapper for video preprocessing
+│   │   │                         models/xception.py, models/f3net.py — vendored F3-Net architecture
+│   │   │                         models/weights.py — F3-Net checkpoint download/cache manager
+│   │   │                         postprocessing.py — score → verdict aggregation (image path)
+│   │   │                         confidence.py — certainty / temporal consistency stats (shared)
+│   │   │                         explainability.py — attention heatmap (image only), heuristics, explanation
+│   │   │                         prediction_service.py — orchestrates predict() / predict_video()
 │   │   │                         errors.py
 │   │   ├── api/routes/        HTTP endpoints (auth, detection, health)
 │   │   ├── core/              Config (Settings, with production safety checks) and security (JWT, hashing)
@@ -295,10 +360,11 @@ DeepShieldAI/
 │   │   ├── services/           Request orchestration (auth_service, detection_service)
 │   │   ├── utils/               logging_config.py, rate_limit.py
 │   │   └── main.py             App factory, middleware, exception handler, static mount, router mounting
-│   ├── static/heatmaps/        Generated attention heatmap images (gitignored)
+│   ├── static/heatmaps/        Generated attention heatmap images, image results only (gitignored)
 │   ├── logs/                    Rotating application log files (gitignored)
 │   ├── tests/                   pytest suite (health, auth, detection, model manager, config)
 │   ├── requirements.txt
+│   ├── requirements-nodeps.txt  facenet-pytorch — installed with --no-deps (see below)
 │   ├── requirements-dev.txt    Adds pytest + httpx for running tests
 │   ├── Dockerfile
 │   ├── .dockerignore
@@ -347,7 +413,8 @@ want to benchmark accuracy, are documented in:
 ### Prerequisites
 - Python 3.11+ (developed on 3.14)
 - Node.js 18.18+ (developed on Node 24)
-- ~2GB free disk space for the PyTorch + Hugging Face model download on first run
+- ~2.5GB free disk space for both models on first run (image model ~330MB
+  from Hugging Face, F3-Net checkpoint ~86MB from GitHub, plus PyTorch itself)
 
 ### Backend setup
 
@@ -355,13 +422,22 @@ want to benchmark accuracy, are documented in:
 cd backend
 python -m venv venv
 .\venv\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\pip.exe install --no-deps -r requirements-nodeps.txt
 copy .env.example .env
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-The first startup downloads the pretrained model (~330MB) from the Hugging
-Face Hub and caches it locally; subsequent restarts are fast. Interactive
-API docs are available at `http://localhost:8000/docs`.
+The two-step install is intentional — `requirements-nodeps.txt` contains
+`facenet-pytorch`, whose declared version pins are years out of date and
+would otherwise conflict with the rest of the stack during normal
+dependency resolution (see the comment in `requirements.txt`). The package
+itself has been verified working against this project's actual
+numpy/torch/torchvision/Pillow versions.
+
+The first startup downloads the image model (~330MB) from the Hugging Face
+Hub and the F3-Net video-model checkpoint (~86MB) from GitHub, caching both
+locally; subsequent restarts are fast. Interactive API docs are available
+at `http://localhost:8000/docs`.
 
 ### Frontend setup
 
@@ -459,15 +535,20 @@ and adjust as needed. No secrets ship in this repo.
 | `SECRET_KEY` | JWT signing secret. **Startup fails if this is left at its default placeholder while `ENVIRONMENT=production`** |
 | `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT configuration |
 | `CORS_ORIGINS` | Allowed frontend origins — accepts a JSON array or a plain comma-separated string |
-| `DETECTION_MODEL_NAME` | Hugging Face model id to load for inference |
+| `DETECTION_MODEL_NAME` | Hugging Face model id to load for **image** inference |
 | `DETECTION_UPLOAD_DIR` | Temp directory for in-flight uploads (auto-cleaned) |
 | `DETECTION_MAX_UPLOAD_MB` | Upload size cap |
-| `DETECTION_ALLOWED_EXTENSIONS` | Allowed upload extensions — JSON array or comma-separated string (optional, has a sensible default) |
-| `DETECTION_FRAME_SAMPLE_SECONDS`, `DETECTION_MAX_FRAMES` | Frame sampling rate/cap |
-| `DETECTION_FAKE_THRESHOLD` | Score threshold for a `DEEPFAKE` verdict |
+| `DETECTION_ALLOWED_EXTENSIONS` | Allowed **video** extensions — JSON array or comma-separated string (optional, has a sensible default) |
+| `DETECTION_ALLOWED_IMAGE_EXTENSIONS` | Allowed **image** extensions — same format, default `.jpg,.jpeg,.png,.webp` |
+| `DETECTION_FRAME_SAMPLE_SECONDS`, `DETECTION_MAX_FRAMES` | Video frame sampling rate/cap |
+| `DETECTION_FAKE_THRESHOLD` | Score threshold for a `DEEPFAKE` verdict, **image model** |
 | `DETECTION_MAX_FRAME_DIMENSION` | Frames larger than this (px, longest edge) are downscaled before inference |
-| `DETECTION_ENABLE_HEATMAP` | Toggle the attention-heatmap XAI pass (adds one extra forward pass per scan) |
+| `DETECTION_ENABLE_HEATMAP` | Toggle the attention-heatmap XAI pass for images (adds one extra forward pass per scan) |
 | `HEATMAP_DIR` | Where generated heatmap PNGs are saved and served from |
+| `VIDEO_MODEL_NAME` | Display name shown for the video model (default `F3-Net (DeepfakeBench)`) |
+| `VIDEO_MODEL_WEIGHTS_DIR` | Where the F3-Net checkpoint is downloaded/cached |
+| `VIDEO_MODEL_RESOLUTION` | Input resolution F3-Net expects (default `256`, matches the released checkpoint — don't change unless using a different checkpoint) |
+| `VIDEO_FAKE_THRESHOLD` | Score threshold for a `DEEPFAKE` verdict, **video model** (independent of `DETECTION_FAKE_THRESHOLD` — the two models were calibrated separately) |
 | `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | Per-user cap on `/detection/analyze` calls |
 | `LOG_DIR`, `LOG_LEVEL` | Rotating log file location and verbosity |
 
@@ -490,11 +571,11 @@ response shapes. Summary of the main routes:
 | `POST` | `/api/auth/register` | Create an account | No |
 | `POST` | `/api/auth/login` | Get a JWT access token | No |
 | `GET` | `/api/auth/me` | Current user profile | Yes |
-| `POST` | `/api/detection/analyze` | Upload a video and run detection | Yes (rate-limited) |
+| `POST` | `/api/detection/analyze` | Upload a video or image — routed to the correct detector automatically | Yes (rate-limited) |
 | `GET` | `/api/detection/history` | Paginated scan history | Yes |
 | `GET` | `/api/detection/{id}` | A single scan's full result | Yes |
 | `GET` | `/api/detection/{id}/report/pdf` | Download a branded PDF report | Yes |
-| `DELETE` | `/api/detection/{id}` | Delete a scan (and its heatmap file) | Yes |
+| `DELETE` | `/api/detection/{id}` | Delete a scan (and its heatmap file, if any) | Yes |
 | `GET` | `/api/health` | Liveness/health check | No |
 
 All authenticated routes expect `Authorization: Bearer <token>`. Detection
@@ -507,9 +588,9 @@ tests).
 1. Start the backend and frontend (see Installation above), or use the deployed URLs.
 2. Visit the app, click **Get Started**, and register an account.
 3. From the dashboard sidebar, open **Detection**.
-4. Drag and drop a video (or click to browse) — MP4, MOV, AVI, or MKV, up to 200MB.
-5. Click **Analyze Video** and watch the live upload progress, then the animated analysis screen.
-6. Review the result: verdict, confidence meter, model certainty, temporal consistency, per-frame chart, attention heatmap, analysis summary, and full file/video metadata. Download a text or PDF report.
+4. Drag and drop a video or image (or click to browse) — MP4, MOV, AVI, MKV, JPG, PNG, or WEBP, up to 200MB. The correct model (image or video) is selected automatically.
+5. Click **Analyze** and watch the live upload progress, then the animated analysis screen.
+6. Review the result: verdict, confidence meter, model certainty, temporal consistency, per-frame/image chart, attention heatmap (image results), analysis summary, and full file metadata. Download a text or PDF report.
 7. Open **History** in the sidebar to browse, review, or delete past scans — the same rich detail view is available from there too.
 8. Explore Settings/Profile as needed.
 
@@ -523,14 +604,22 @@ cd backend
 .\venv\Scripts\python.exe -m pytest -v
 ```
 
-38 tests, run against an isolated SQLite file (never your dev
-`deepshield.db`), exercising the **real** AI model end-to-end: a full
-upload → frame extraction → inference → aggregation → explainability pass
-on a small synthetic video generated on the fly; auth; large-file and
-corrupted-media rejection; PDF report generation; model-manager validation;
-production configuration safety checks (`SECRET_KEY`/`CORS_ORIGINS`
-parsing); heatmap-file cleanup on delete; and authorization-scoping checks
-(a user can't view, delete, or download a report for another user's scans).
+46 tests (1 conditionally skipped), run against an isolated SQLite file
+(never your dev `deepshield.db`), exercising **both real AI models**
+end-to-end: full upload → routing → inference → aggregation →
+explainability passes for both a synthetic image and a synthetic video
+generated on the fly; the real "no face detected" rejection path (video);
+auth; large-file and corrupted-media rejection; PDF report generation for
+both file types; model-manager validation; production configuration safety
+checks (`SECRET_KEY`/`CORS_ORIGINS` parsing); heatmap-file cleanup on
+delete; and authorization-scoping checks (a user can't view, delete, or
+download a report for another user's scans).
+
+The face-detection step in tests uses a documented fallback (see
+`app/ai/face_detection.py`) so synthetic random-noise test frames — which
+genuinely contain no face — still exercise the real F3-Net model instead of
+being rejected outright; a dedicated test runs with that fallback disabled
+to confirm the real rejection behavior works correctly.
 
 ### Frontend (Vitest + React Testing Library)
 
@@ -546,17 +635,19 @@ and attention-heatmap components.
 ## Future Improvements
 
 - Build out the Analytics page against the existing detection history data
-- Fine-tune a model on a modern deepfake dataset to address the concept-drift limitation noted in `datasets/dataset_info.md`
+- Fine-tune the image model on a modern deepfake dataset to address the concept-drift limitation noted in `datasets/dataset_info.md`
 - Add an AI assistant that can explain a specific scan result conversationally
 - Add real-time progress streaming (WebSocket/SSE) instead of the current single request/response cycle
-- Support audio and image deepfake detection (explicitly out of scope so far)
+- Support audio deepfake detection (explicitly out of scope so far)
 - Add password reset, email verification, and two-factor authentication
 - Add a database migration tool (e.g. Alembic) — schema changes currently require recreating the local dev database
 - Move the rate limiter and model cache to a shared store (e.g. Redis) if scaling to multiple backend workers
 - Migrate `DATABASE_URL` to a managed Postgres instance for real data persistence on PaaS hosts with ephemeral disks
 - Add a retention/cleanup policy for generated heatmap images if the app ever runs with high scan volume and persistent storage
-- Re-introduce a face-presence heuristic using `cv2.FaceDetectorYN` (OpenCV 5 dropped the bundled Haar cascades this project originally used) — deferred because it requires downloading and caching an external ONNX model
-- Support multiple/ensemble models via the `ModelManager`'s existing `switch_model()` capability, once a second model is worth adding
+- Support multiple/ensemble models via the `ModelManager`'s / `VideoModelManager`'s existing model-switching capability, once a second model of either type is worth adding
+- Investigate a video-native explainability visualization (F3-Net has no transformer attention to roll out, so today's heatmap technique doesn't apply to video results)
+- Batch multiple sampled frames through F3-Net in a single forward pass more aggressively, and/or add GPU deployment guidance, to reduce video analysis latency
+- Replace F3-Net with a permissively-licensed (non-NC) video detector if this project is ever adapted for commercial use — see the license note in `models/README.md`
 
 ## License
 

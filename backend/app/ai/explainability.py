@@ -133,28 +133,38 @@ def build_explanation(
     temporal_consistency: float,
     model_certainty: float,
     heuristics: dict[str, float | int],
+    media_type: str = "video",
 ) -> str:
-    frame_word = "frame" if frames_processed == 1 else "frames"
+    is_image = media_type == "image"
+    media_word = "image" if is_image else "video"
     verdict_phrase = (
         "did not show strong signs of AI manipulation"
         if prediction == "REAL"
         else "showed signs consistent with AI-generated or manipulated content"
     )
-    risk_phrase = {
-        "Low": "minimal fake-signal was detected across the sampled frames.",
-        "Medium": "some frames showed moderate fake-signal — a manual review is recommended.",
-        "High": "a majority of sampled frames showed strong fake-signal.",
-    }[risk_level]
 
-    if temporal_consistency >= 80:
-        consistency_phrase = "The model's assessment was highly consistent across frames."
-    elif temporal_consistency < 50:
-        consistency_phrase = (
-            "The model's assessment varied noticeably between frames, which can indicate "
-            "manipulation is only present in part of the clip, or that the result is less reliable."
-        )
+    if is_image:
+        risk_phrase = {
+            "Low": "minimal fake-signal was detected.",
+            "Medium": "moderate fake-signal was detected — a manual review is recommended.",
+            "High": "strong fake-signal was detected.",
+        }[risk_level]
+        consistency_phrase = ""
     else:
-        consistency_phrase = "The model's assessment was moderately consistent across frames."
+        risk_phrase = {
+            "Low": "minimal fake-signal was detected across the sampled frames.",
+            "Medium": "some frames showed moderate fake-signal — a manual review is recommended.",
+            "High": "a majority of sampled frames showed strong fake-signal.",
+        }[risk_level]
+        if temporal_consistency >= 80:
+            consistency_phrase = " The model's assessment was highly consistent across frames."
+        elif temporal_consistency < 50:
+            consistency_phrase = (
+                " The model's assessment varied noticeably between frames, which can indicate "
+                "manipulation is only present in part of the clip, or that the result is less reliable."
+            )
+        else:
+            consistency_phrase = " The model's assessment was moderately consistent across frames."
 
     if model_certainty >= 60:
         certainty_phrase = "well clear of the decision threshold"
@@ -164,19 +174,28 @@ def build_explanation(
         certainty_phrase = "moderately clear of the decision threshold"
 
     avg_sharpness = heuristics.get("averageSharpness", 0)
+    sharpness_subject = "the image" if is_image else "sampled frames"
     sharpness_phrase = (
-        f"As a supplementary signal, sampled frames had an average sharpness score of "
+        f"As a supplementary signal, {sharpness_subject} had an average sharpness score of "
         f"{avg_sharpness:.0f} (Laplacian variance) — unusually low values can indicate the "
         "smoothing some manipulation techniques introduce, though low sharpness alone is not "
-        "conclusive (it can also simply reflect video quality)."
+        f"conclusive (it can also simply reflect {'image' if is_image else 'video'} quality)."
     )
 
+    if is_image:
+        analyzed_phrase = f"Analyzed the uploaded image. The fake-likelihood score was {avg_frame_score:.1f}%,"
+    else:
+        frame_word = "frame" if frames_processed == 1 else "frames"
+        analyzed_phrase = (
+            f"Analyzed {frames_processed} sampled {frame_word}. The average fake-likelihood "
+            f"across those frames was {avg_frame_score:.1f}%,"
+        )
+
     return (
-        f"Analyzed {frames_processed} sampled {frame_word}. The average fake-likelihood "
-        f"across those frames was {avg_frame_score:.1f}%, producing a {prediction} verdict "
-        f"with {confidence:.1f}% confidence, {certainty_phrase}. The video {verdict_phrase}. "
-        f"Risk level: {risk_level} — {risk_phrase} {consistency_phrase} {sharpness_phrase} "
+        f"{analyzed_phrase} producing a {prediction} verdict "
+        f"with {confidence:.1f}% confidence, {certainty_phrase}. The {media_word} {verdict_phrase}. "
+        f"Risk level: {risk_level} — {risk_phrase}{consistency_phrase} {sharpness_phrase} "
         "Note: this score reflects overall visual authenticity as judged by a single "
-        "image-classification model applied per frame — it does not separately identify the "
-        "type of manipulation (e.g. face-swap vs. compression artifact)."
+        "image-classification model" + (" applied per frame" if not is_image else "") + " — it does not "
+        "separately identify the type of manipulation (e.g. face-swap vs. compression artifact)."
     )

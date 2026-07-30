@@ -10,47 +10,109 @@ from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.ai import prediction_service
+from app.ai import image_detector, prediction_service
 from app.ai.errors import DetectionError
-from app.ai.preprocessing import extract_frames, extract_metadata, save_upload_streaming, validate_extension
+from app.ai.preprocessing import (
+    classify_file_type,
+    extract_frames,
+    extract_image_metadata,
+    extract_metadata,
+    load_image,
+    save_upload_streaming,
+    validate_extension,
+)
 from app.core.config import settings
 from app.db.models.detection import Detection
 from app.db.models.user import User
 
 logger = logging.getLogger("deepshield.detection")
 
-__all__ = ["DetectionError", "analyze_video", "get_history", "get_detection", "delete_detection"]
+__all__ = ["DetectionError", "analyze_upload", "get_history", "get_detection", "delete_detection"]
 
 
-def analyze_video(db: Session, user: User, upload_file: UploadFile) -> Detection:
+def analyze_upload(db: Session, user: User, upload_file: UploadFile) -> Detection:
+    """Routes an upload to the image or video detector automatically based
+    on its file extension — the user never chooses. Both paths converge on
+    the same Detection row / response shape, just with different fields
+    populated (e.g. an image has no duration/fps/frame_count)."""
     extension = validate_extension(upload_file.filename)
+    file_type = classify_file_type(extension)
     temp_path, file_size = save_upload_streaming(upload_file, extension)
-    logger.info("Upload received: user=%s filename=%s size=%dB", user.id, upload_file.filename, file_size)
+    logger.info(
+        "Upload received: user=%s filename=%s type=%s size=%dB", user.id, upload_file.filename, file_type, file_size
+    )
 
     started_at = time.perf_counter()
     try:
-        video_metadata = extract_metadata(temp_path)
-        frames = extract_frames(temp_path)
-        outcome = prediction_service.predict(frames)
+        if file_type == "image":
+            detection = _analyze_image(db, user, upload_file, temp_path, file_size, started_at)
+        else:
+            detection = _analyze_video(db, user, upload_file, temp_path, file_size, started_at)
     except DetectionError as error:
         logger.warning("Analysis rejected: user=%s filename=%s reason=%s", user.id, upload_file.filename, error)
         raise
     finally:
         temp_path.unlink(missing_ok=True)
 
+    return detection
+
+
+def _analyze_image(db, user, upload_file, temp_path, file_size, started_at) -> Detection:
+    image_metadata = extract_image_metadata(temp_path)
+    image = load_image(temp_path)
+    outcome = image_detector.analyze_image(image)
     processing_time = round(time.perf_counter() - started_at, 2)
 
     detection = Detection(
         user_id=user.id,
         filename=Path(upload_file.filename).name,
+        file_type="image",
         prediction=outcome.prediction,
         confidence=outcome.confidence,
         risk_level=outcome.risk_level,
         avg_frame_score=outcome.avg_frame_score,
         explanation=outcome.explanation,
-        frames_processed=len(frames),
+        frames_processed=1,
         processing_time=processing_time,
         model_used=settings.detection_model_name,
+        frame_scores=outcome.frame_scores,
+        temporal_consistency=outcome.temporal_consistency,
+        model_certainty=outcome.model_certainty,
+        heuristics=outcome.heuristics,
+        heatmap_filename=outcome.heatmap_filename,
+        video_width=image_metadata.width,
+        video_height=image_metadata.height,
+        video_duration_seconds=None,
+        video_fps=None,
+        video_codec=image_metadata.format,
+        video_frame_count=None,
+        file_size_bytes=file_size,
+    )
+    return _persist(db, user, detection, processing_time)
+
+
+def _analyze_video(db, user, upload_file, temp_path, file_size, started_at) -> Detection:
+    video_metadata = extract_metadata(temp_path)
+    frames = extract_frames(temp_path)
+    outcome = prediction_service.predict_video(frames)
+    processing_time = round(time.perf_counter() - started_at, 2)
+
+    detection = Detection(
+        user_id=user.id,
+        filename=Path(upload_file.filename).name,
+        file_type="video",
+        prediction=outcome.prediction,
+        confidence=outcome.confidence,
+        risk_level=outcome.risk_level,
+        avg_frame_score=outcome.avg_frame_score,
+        explanation=outcome.explanation,
+        # F3-Net skips frames with no detectable face, so this can be lower
+        # than the raw sampled frame count — it reflects frames actually
+        # scored, matching outcome.frame_scores exactly (same convention the
+        # image pipeline already uses).
+        frames_processed=len(outcome.frame_scores),
+        processing_time=processing_time,
+        model_used=settings.video_model_name,
         frame_scores=outcome.frame_scores,
         temporal_consistency=outcome.temporal_consistency,
         model_certainty=outcome.model_certainty,
@@ -64,20 +126,24 @@ def analyze_video(db: Session, user: User, upload_file: UploadFile) -> Detection
         video_frame_count=video_metadata.frame_count,
         file_size_bytes=file_size,
     )
+    return _persist(db, user, detection, processing_time)
+
+
+def _persist(db: Session, user: User, detection: Detection, processing_time: float) -> Detection:
     db.add(detection)
     db.commit()
     db.refresh(detection)
 
     logger.info(
-        "Prediction complete: user=%s detection_id=%s verdict=%s confidence=%.1f%% frames=%d time=%.2fs",
+        "Prediction complete: user=%s detection_id=%s type=%s verdict=%s confidence=%.1f%% frames=%d time=%.2fs",
         user.id,
         detection.id,
+        detection.file_type,
         detection.prediction,
         detection.confidence,
         detection.frames_processed,
         processing_time,
     )
-
     return detection
 
 

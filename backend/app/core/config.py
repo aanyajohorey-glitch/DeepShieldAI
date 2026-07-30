@@ -24,7 +24,13 @@ class Settings(BaseSettings):
     or a local .env file. This is the single place configurable values live
     — avoid hardcoding them elsewhere in the app."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # enable_decoding=False: pydantic-settings would otherwise try to
+    # JSON-decode any list-typed field's raw env-var string *before* our
+    # `_parse_list_env` validator below ever runs, and raise a hard
+    # SettingsError on a plain comma-separated value instead of falling
+    # through to it. Disabling it hands the raw string straight to our
+    # validator, which handles both JSON and CSV forms itself.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", enable_decoding=False)
 
     app_name: str = "DeepShield AI"
     app_version: str = "0.1.0"
@@ -41,11 +47,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    # Deepfake detection — model & pipeline
+    # Deepfake detection — image pipeline (dima806 ViT classifier)
     detection_model_name: str = "dima806/deepfake_vs_real_image_detection"
     detection_upload_dir: str = "./tmp_uploads"
     detection_max_upload_mb: int = 200
+    # Kept as the "video extensions" setting under its original name for
+    # backward compatibility with existing .env files from earlier phases —
+    # detection_allowed_image_extensions (below) is the new, additive one.
     detection_allowed_extensions: list[str] = [".mp4", ".mov", ".avi", ".mkv"]
+    detection_allowed_image_extensions: list[str] = [".jpg", ".jpeg", ".png", ".webp"]
     detection_frame_sample_seconds: float = 1.0
     detection_max_frames: int = 30
     detection_fake_threshold: float = 0.5
@@ -53,6 +63,17 @@ class Settings(BaseSettings):
     """Frames wider or taller than this (px) are downscaled before inference
     — the model resizes to its own fixed input size regardless, so this only
     saves conversion/memory overhead on large source videos."""
+
+    # Deepfake detection — video pipeline (F3-Net + MTCNN face cropping)
+    video_model_name: str = "F3-Net (DeepfakeBench)"
+    video_model_weights_dir: str = "../models/weights"
+    """Where the F3-Net checkpoint is downloaded/cached on first use — never
+    committed to git (see models/README.md)."""
+    video_model_resolution: int = 256
+    video_fake_threshold: float = 0.5
+    """F3-Net's own decision threshold — kept separate from
+    detection_fake_threshold since the two models were trained/calibrated
+    independently and there's no reason their thresholds should match."""
 
     # Explainable AI
     detection_enable_heatmap: bool = True
@@ -69,7 +90,9 @@ class Settings(BaseSettings):
     log_dir: str = "./logs"
     log_level: str = "INFO"
 
-    @field_validator("cors_origins", "detection_allowed_extensions", mode="before")
+    @field_validator(
+        "cors_origins", "detection_allowed_extensions", "detection_allowed_image_extensions", mode="before"
+    )
     @classmethod
     def _parse_list_env(cls, value: object) -> object:
         return _split_csv_or_json(value)

@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { FileVideo, X } from "lucide-react";
+import { FileImage, FileVideo, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { isImageExtension } from "@/lib/detection-constants";
 import { formatBytes } from "./UploadDropzone";
 
 interface UploadProgressProps {
@@ -13,6 +14,9 @@ interface UploadProgressProps {
 }
 
 export function UploadProgress({ file, percent, onCancel }: UploadProgressProps) {
+  const extension = `.${file.name.split(".").pop()?.toLowerCase() ?? ""}`;
+  const Icon = isImageExtension(extension) ? FileImage : FileVideo;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -20,7 +24,7 @@ export function UploadProgress({ file, percent, onCancel }: UploadProgressProps)
       className="glass-card flex flex-col items-center gap-6 px-6 py-12 text-center"
     >
       <span className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-strong/20 to-purple-strong/20 text-cyan">
-        <FileVideo className="size-8" strokeWidth={1.5} />
+        <Icon className="size-8" strokeWidth={1.5} />
       </span>
 
       <div className="min-w-0">

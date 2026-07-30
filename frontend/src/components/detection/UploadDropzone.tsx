@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { FileVideo, TriangleAlert, UploadCloud } from "lucide-react";
+import { Files, TriangleAlert, UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DETECTION_ACCEPT_ATTRIBUTE,
@@ -101,11 +101,11 @@ export function UploadDropzone({ onFileSelected }: UploadDropzoneProps) {
 
         <div>
           <p className="text-lg font-semibold text-foreground">
-            Drag &amp; drop a video, or{" "}
+            Drag &amp; drop a video or image, or{" "}
             <span className="text-cyan underline underline-offset-4">browse files</span>
           </p>
           <p className="mt-2 flex items-center justify-center gap-2 text-sm text-muted">
-            <FileVideo className="size-4" />
+            <Files className="size-4" />
             {DETECTION_ACCEPTED_EXTENSIONS.map((ext) => ext.replace(".", "").toUpperCase()).join(
               " · "
             )}{" "}

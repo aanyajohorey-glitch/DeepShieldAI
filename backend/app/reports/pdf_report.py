@@ -91,6 +91,7 @@ def generate_detection_pdf(detection: Detection) -> bytes:
                 ["Generated", generated_at],
                 ["Scan Timestamp", detection.created_at.strftime("%B %d, %Y at %H:%M UTC")],
                 ["File Analyzed", detection.filename],
+                ["File Type", detection.file_type.capitalize()],
             ]
         )
     )
@@ -161,16 +162,18 @@ def generate_detection_pdf(detection: Detection) -> bytes:
     if detection.video_fps:
         file_rows.append(["Frame Rate", f"{detection.video_fps:.1f} fps"])
     if detection.video_codec:
-        file_rows.append(["Codec", detection.video_codec])
+        codec_label = "Format" if detection.file_type == "image" else "Codec"
+        file_rows.append([codec_label, detection.video_codec])
     file_rows.append(["Model Used", detection.model_used])
     story.append(_meta_table(file_rows))
     story.append(Spacer(1, 10 * mm))
 
     story.append(HRFlowable(width="100%", thickness=0.5, color=_BORDER))
     story.append(Spacer(1, 4 * mm))
+    analyzed_subject = "the uploaded image" if detection.file_type == "image" else "sampled video frames"
     disclaimer = (
-        "This report was generated automatically by DeepShield AI using a pretrained AI model "
-        "applied to sampled video frames. It reflects an automated assessment of visual "
+        f"This report was generated automatically by DeepShield AI using a pretrained AI model "
+        f"applied to {analyzed_subject}. It reflects an automated assessment of visual "
         "authenticity and should be reviewed alongside other evidence before being used for "
         "high-stakes decisions. DeepShield AI is a research/educational capstone project and "
         "does not constitute a forensic certification."

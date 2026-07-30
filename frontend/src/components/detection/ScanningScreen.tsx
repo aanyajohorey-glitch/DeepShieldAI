@@ -48,7 +48,7 @@ export function ScanningScreen() {
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Analyzing Video...</h2>
+        <h2 className="text-xl font-semibold text-foreground">Analyzing...</h2>
         <div className="mt-2 h-5">
           <AnimatePresence mode="wait">
             <motion.p
@@ -70,7 +70,7 @@ export function ScanningScreen() {
       </div>
 
       <p className="font-mono text-sm text-muted-foreground">
-        Frame {frameCount} of ~{ESTIMATED_FRAME_CEILING} analyzed
+        Step {frameCount} of ~{ESTIMATED_FRAME_CEILING}
       </p>
     </motion.div>
   );

@@ -19,7 +19,8 @@ def test_analyze_returns_expected_shape(analyzed_result):
     assert analyzed_result["framesProcessed"] > 0
     assert analyzed_result["processingTime"] > 0
     assert analyzed_result["explanation"]
-    assert "dima806" in analyzed_result["modelUsed"]
+    assert "F3-Net" in analyzed_result["modelUsed"]
+    assert analyzed_result["fileType"] == "video"
 
 
 def test_analyze_includes_explainability_fields(analyzed_result):
@@ -42,6 +43,81 @@ def test_analyze_includes_video_metadata(analyzed_result):
     assert metadata["fps"] is not None
     assert metadata["durationSeconds"] is not None
     assert metadata["fileSizeBytes"] is not None
+
+
+@pytest.fixture(scope="module")
+def analyzed_image_result(client, auth_headers, sample_image_bytes):
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("sample.jpg", sample_image_bytes, "image/jpeg")},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_analyze_image_routes_to_image_detector(analyzed_image_result):
+    """Phase 6 (dual detection): a jpg upload must be routed to the image
+    detector automatically — the user never chooses. framesProcessed is
+    always 1 for a still image (there's only one frame to score)."""
+    assert analyzed_image_result["fileType"] == "image"
+    assert analyzed_image_result["prediction"] in ("REAL", "DEEPFAKE")
+    assert 0 <= analyzed_image_result["confidence"] <= 100
+    assert analyzed_image_result["framesProcessed"] == 1
+    assert "dima806" in analyzed_image_result["modelUsed"]
+    assert "image" in analyzed_image_result["explanation"].lower()
+
+
+def test_analyze_image_metadata_has_no_video_fields(analyzed_image_result):
+    """An image has width/height but no duration/fps/frameCount — those
+    must come back null rather than fabricated."""
+    metadata = analyzed_image_result["metadata"]
+    assert metadata["width"] == 128
+    assert metadata["height"] == 128
+    assert metadata["durationSeconds"] is None
+    assert metadata["fps"] is None
+    assert metadata["frameCount"] is None
+
+
+def test_analyze_rejects_unsupported_image_extension(client, auth_headers):
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("notes.gif", b"GIF89a" + b"\x00" * 32, "image/gif")},
+    )
+    assert response.status_code == 400
+    assert "Unsupported file format" in response.json()["detail"]
+
+
+def test_analyze_rejects_spoofed_image_extension(client, auth_headers):
+    """A .jpg-named file whose bytes don't match the real JPEG signature
+    must be rejected, mirroring the existing video spoofing check."""
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("fake.png", b"this is not really a png file", "image/png")},
+    )
+    assert response.status_code == 400
+    assert "do not match" in response.json()["detail"]
+
+
+def test_analyze_video_rejects_no_detectable_face(client, auth_headers, sample_video_bytes, monkeypatch):
+    """With the test-only face-detection fallback disabled, a video with no
+    real face (the synthetic random-noise fixture) must be rejected by the
+    real MTCNN detector — this is the actual production behavior; the
+    fallback in every other test exists only because bundling a real face
+    photo as a binary git fixture isn't appropriate here (see
+    app/ai/face_detection.py)."""
+    import app.ai.face_detection as face_detection_module
+
+    monkeypatch.setattr(face_detection_module, "_TEST_FACE_FALLBACK", False)
+    response = client.post(
+        "/api/detection/analyze",
+        headers=auth_headers,
+        files={"file": ("noface.mp4", sample_video_bytes, "video/mp4")},
+    )
+    assert response.status_code == 422
+    assert "No face could be detected" in response.json()["detail"]
 
 
 def test_analyze_requires_authentication(client, sample_video_bytes):
@@ -155,6 +231,12 @@ def test_pdf_report_returns_valid_pdf(client, auth_headers, analyzed_result):
 def test_pdf_report_requires_authentication(client, analyzed_result):
     response = client.get(f"/api/detection/{analyzed_result['id']}/report/pdf")
     assert response.status_code == 401
+
+
+def test_pdf_report_for_image_result_is_valid(client, auth_headers, analyzed_image_result):
+    response = client.get(f"/api/detection/{analyzed_image_result['id']}/report/pdf", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.content[:4] == b"%PDF"
 
 
 def test_pdf_report_not_found(client, auth_headers):

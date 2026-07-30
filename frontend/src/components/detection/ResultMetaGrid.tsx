@@ -44,7 +44,9 @@ export function ResultMetaGrid({ result }: { result: DetectionResult }) {
       ? [{ icon: Clock, label: "Duration", value: `${metadata.durationSeconds.toFixed(1)}s` }]
       : []),
     ...(metadata.fps ? [{ icon: Gauge, label: "Frame Rate", value: `${metadata.fps.toFixed(1)} fps` }] : []),
-    ...(metadata.codec ? [{ icon: Film, label: "Codec", value: metadata.codec }] : []),
+    ...(metadata.codec
+      ? [{ icon: Film, label: result.fileType === "image" ? "Format" : "Codec", value: metadata.codec }]
+      : []),
     ...(formatFileSize(metadata.fileSizeBytes)
       ? [{ icon: HardDrive, label: "File Size", value: formatFileSize(metadata.fileSizeBytes) as string }]
       : []),

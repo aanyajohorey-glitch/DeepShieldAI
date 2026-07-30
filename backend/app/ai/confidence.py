@@ -37,14 +37,18 @@ def temporal_consistency(fake_scores: list[float]) -> float:
     return round(consistency * 100, 1)
 
 
-def model_certainty(avg_fake_score: float) -> float:
+def model_certainty(avg_fake_score: float, threshold: float | None = None) -> float:
     """0-100: how far the average score sits from the decision threshold.
     A score right at the threshold (maximally ambiguous) scores 0; a score
     at the extreme end of the scale (0% or 100% fake-likelihood) scores 100.
     This is a distinct signal from `confidence_percent` — a video can have
     high confidence in its predicted class while still sitting close to the
-    threshold in absolute terms, and vice versa for small sample counts."""
-    threshold = settings.detection_fake_threshold
+    threshold in absolute terms, and vice versa for small sample counts.
+
+    `threshold` defaults to the image model's decision threshold — pass
+    `settings.video_fake_threshold` explicitly when scoring the video
+    (F3-Net) pipeline, since the two models were calibrated independently."""
+    threshold = threshold if threshold is not None else settings.detection_fake_threshold
     distance = abs(avg_fake_score - threshold)
     max_distance = max(threshold, 1 - threshold)
     if max_distance <= 0:

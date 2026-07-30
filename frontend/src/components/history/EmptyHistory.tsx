@@ -17,7 +17,7 @@ export function EmptyHistory() {
       <Link href="/detection">
         <Button>
           <ScanFace className="size-4" />
-          Analyze a Video
+          Analyze a File
         </Button>
       </Link>
     </div>

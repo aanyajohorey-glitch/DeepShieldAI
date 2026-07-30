@@ -1,0 +1,6 @@
+# Installed with `pip install --no-deps -r requirements-nodeps.txt`, after
+# requirements.txt. See the comment in requirements.txt for why: this
+# package's declared version pins are years stale and would otherwise
+# conflict with the rest of the stack during normal dependency resolution,
+# even though the package itself works fine against our actual versions.
+facenet-pytorch==2.6.0

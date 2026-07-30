@@ -26,6 +26,24 @@ def test_cors_origins_defaults_when_unset():
     assert "http://localhost:3000" in settings.cors_origins
 
 
+def test_cors_origins_accepts_plain_csv_from_real_env_var(monkeypatch):
+    """Regression test: constructing Settings(cors_origins="...") via kwargs
+    bypasses pydantic-settings' env/dotenv source entirely, so it doesn't
+    exercise the actual code path a real deployment hits. This sets a real
+    environment variable, which previously crashed with a SettingsError
+    before our validator ever ran (pydantic-settings tried to JSON-decode
+    the raw string first). See `enable_decoding=False` in config.py."""
+    monkeypatch.setenv("CORS_ORIGINS", "https://a.example.com,https://b.example.com")
+    settings = Settings()
+    assert settings.cors_origins == ["https://a.example.com", "https://b.example.com"]
+
+
+def test_cors_origins_accepts_json_array_from_real_env_var(monkeypatch):
+    monkeypatch.setenv("CORS_ORIGINS", '["https://a.example.com"]')
+    settings = Settings()
+    assert settings.cors_origins == ["https://a.example.com"]
+
+
 def test_detection_allowed_extensions_accepts_csv_string():
     settings = Settings(detection_allowed_extensions=".mp4, .mov")
     assert settings.detection_allowed_extensions == [".mp4", ".mov"]

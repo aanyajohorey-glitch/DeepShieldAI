@@ -115,7 +115,7 @@ export default function DetectionPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Deepfake Detection</h1>
         <p className="mt-1 text-sm text-muted">
-          Upload a video to analyze it with DeepShield AI&apos;s pre-trained detection model.
+          Upload a video or image to analyze it with DeepShield AI&apos;s pre-trained detection models.
         </p>
       </div>
 

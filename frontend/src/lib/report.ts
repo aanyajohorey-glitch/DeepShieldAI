@@ -11,6 +11,7 @@ export function downloadReport(result: DetectionResult) {
     "=".repeat(44),
     "",
     `File:                 ${result.filename}`,
+    `File Type:            ${result.fileType === "image" ? "Image" : "Video"}`,
     `Verdict:              ${result.prediction}`,
     `Confidence:           ${result.confidence.toFixed(1)}%`,
     `Risk Level:           ${result.riskLevel}`,

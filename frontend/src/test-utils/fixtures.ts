@@ -4,6 +4,7 @@ export function makeDetectionResult(overrides: Partial<DetectionResult> = {}): D
   return {
     id: 42,
     filename: "sample.mp4",
+    fileType: "video",
     prediction: "REAL",
     confidence: 87.3,
     riskLevel: "Low",

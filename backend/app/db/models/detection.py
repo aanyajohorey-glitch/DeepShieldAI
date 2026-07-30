@@ -19,6 +19,7 @@ class Detection(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
 
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(8), nullable=False, default="video")  # "image" | "video"
     prediction: Mapped[str] = mapped_column(String(16), nullable=False)  # REAL | DEEPFAKE
     confidence: Mapped[float] = mapped_column(Float, nullable=False)  # 0-100
     risk_level: Mapped[str] = mapped_column(String(16), nullable=False)  # Low | Medium | High

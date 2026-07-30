@@ -26,14 +26,27 @@ class VideoMetadata:
     frame_count: int | None
     codec: str | None
 
-# Known container signatures, checked against the first bytes of the upload
-# so a malicious file can't just be renamed to ".mp4" to bypass validation.
-# Maps file extension -> a function that checks a header byte string.
+
+@dataclass
+class ImageMetadata:
+    width: int | None
+    height: int | None
+    format: str | None
+
+
+# Known file signatures, checked against the first bytes of the upload so a
+# malicious file can't just be renamed to bypass validation. Maps file
+# extension -> a function that checks a header byte string. Covers both the
+# video container formats and the still-image formats this app accepts.
 _SIGNATURE_CHECKS = {
     ".mp4": lambda header: header[4:8] == b"ftyp",
     ".mov": lambda header: header[4:8] == b"ftyp",
     ".avi": lambda header: header[0:4] == b"RIFF" and header[8:12] == b"AVI ",
     ".mkv": lambda header: header[0:4] == b"\x1a\x45\xdf\xa3",
+    ".jpg": lambda header: header[0:3] == b"\xff\xd8\xff",
+    ".jpeg": lambda header: header[0:3] == b"\xff\xd8\xff",
+    ".png": lambda header: header[0:8] == b"\x89PNG\r\n\x1a\n",
+    ".webp": lambda header: header[0:4] == b"RIFF" and header[8:12] == b"WEBP",
 }
 
 
@@ -43,16 +56,28 @@ def ensure_upload_dir() -> Path:
     return upload_dir
 
 
+def classify_file_type(extension: str) -> str:
+    """Returns "image" or "video" for a validated extension — the single
+    source of truth the rest of the app uses to route a file to the image
+    or video detector. The user never chooses; this is automatic."""
+    if extension in settings.detection_allowed_image_extensions:
+        return "image"
+    return "video"
+
+
 def validate_extension(filename: str | None) -> str:
+    """Accepts either an image or a video extension — classify_file_type()
+    determines which detector handles it afterwards."""
     if not filename:
         raise DetectionError(400, "The uploaded file has no filename.")
 
     extension = Path(filename).suffix.lower()
-    if extension not in settings.detection_allowed_extensions:
-        allowed = ", ".join(settings.detection_allowed_extensions)
+    allowed = settings.detection_allowed_extensions + settings.detection_allowed_image_extensions
+    if extension not in allowed:
+        allowed_str = ", ".join(allowed)
         raise DetectionError(
             400,
-            f"Unsupported file format '{extension or 'unknown'}'. Supported formats: {allowed}.",
+            f"Unsupported file format '{extension or 'unknown'}'. Supported formats: {allowed_str}.",
         )
     return extension
 
@@ -200,3 +225,26 @@ def extract_frames(video_path: Path) -> list[Image.Image]:
         raise DetectionError(422, "Could not extract any frames from the video. The file may be corrupted.")
 
     return frames
+
+
+def load_image(image_path: Path) -> Image.Image:
+    """Loads and validates a still-image upload. Raises if the file isn't a
+    decodable image (corrupted, truncated, or a spoofed extension that
+    slipped past the magic-byte check)."""
+    try:
+        with Image.open(image_path) as opened:
+            opened.verify()
+        # verify() leaves the file unusable for further ops — reopen to actually load pixel data.
+        image = Image.open(image_path).convert("RGB")
+    except Exception as error:
+        raise DetectionError(422, "The uploaded file is not a valid or supported image.") from error
+
+    return image
+
+
+def extract_image_metadata(image_path: Path) -> ImageMetadata:
+    try:
+        with Image.open(image_path) as image:
+            return ImageMetadata(width=image.width, height=image.height, format=image.format)
+    except Exception:
+        return ImageMetadata(width=None, height=None, format=None)

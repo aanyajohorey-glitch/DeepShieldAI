@@ -10,12 +10,23 @@ python-jose[cryptography]==3.4.0
 bcrypt==4.2.1
 python-multipart==0.0.20
 
-# Deepfake detection (video pipeline)
+# Deepfake detection — image pipeline (dima806 ViT classifier)
 torch==2.13.0
 transformers==5.14.1
 opencv-python-headless==5.0.0.93
 pillow==12.3.0
 numpy==2.5.1
+
+# Deepfake detection — video pipeline (F3-Net + MTCNN face cropping)
+torchvision==0.28.0
+requests==2.34.2
+# facenet-pytorch is installed separately with --no-deps (see Dockerfile /
+# README setup steps) — its declared pins (numpy<2.0, torch<2.3, pillow<10.3,
+# torchvision<0.18) are years out of date and would conflict with the pins
+# above during normal `pip install -r requirements.txt` resolution, but the
+# package itself (MTCNN face detection) has been verified working against
+# our actual numpy/torch/torchvision/pillow versions.
+# facenet-pytorch==2.6.0
 
 # PDF report generation
 reportlab==5.0.0

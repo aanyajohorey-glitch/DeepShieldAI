@@ -54,6 +54,8 @@ export type DetectionPrediction = "REAL" | "DEEPFAKE";
 
 export type DetectionRiskLevel = "Low" | "Medium" | "High";
 
+export type DetectionFileType = "image" | "video";
+
 export interface VideoMetadata {
   width: number | null;
   height: number | null;
@@ -74,6 +76,7 @@ export interface DetectionHeuristics {
 export interface DetectionResult {
   id: number;
   filename: string;
+  fileType: DetectionFileType;
   prediction: DetectionPrediction;
   confidence: number;
   riskLevel: DetectionRiskLevel;

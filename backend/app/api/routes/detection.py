@@ -8,7 +8,7 @@ from app.reports.pdf_report import generate_detection_pdf
 from app.schemas.detection import DetectionHistoryResponse, DetectionResult
 from app.services.detection_service import (
     DetectionError,
-    analyze_video,
+    analyze_upload,
     delete_detection,
     get_detection,
     get_history,
@@ -30,7 +30,7 @@ def analyze(
     db: Session = Depends(get_db),
 ):
     try:
-        detection = analyze_video(db, current_user, file)
+        detection = analyze_upload(db, current_user, file)
     except DetectionError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error))
     return DetectionResult.from_detection(detection)
